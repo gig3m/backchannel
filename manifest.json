@@ -18,11 +18,12 @@
   },
   "barWidget": {
     "displayName": "Backchannel",
-    "description": "Slack: unread and mention counts in the bar, conversations and a composer in the popup; middle-click opens the full window.",
+    "description": "Slack: unread and mention counts in the bar. Click for the popup or the full window (your choice), right-click for a menu.",
     "category": "Communication",
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
+      "clickAction": "popup",
       "notifications": true,
       "notifyChannels": "mentions",
       "autostartDaemon": true,
@@ -30,6 +31,24 @@
       "hideQuietChannels": false
     },
     "schema": [
+      {
+        "key": "clickAction",
+        "type": "enum",
+        "label": "Clicking the bar glyph opens",
+        "defaultValue": "popup",
+        "options": [
+          {
+            "value": "popup",
+            "label": "The popup under the bar"
+          },
+          {
+            "value": "window",
+            "label": "The full window"
+          }
+        ],
+        "description": "Middle-click opens the other one; right-click opens the menu.",
+        "section": "Bar"
+      },
       {
         "key": "notifications",
         "type": "boolean",
@@ -44,8 +63,14 @@
         "label": "Notify for channel messages",
         "defaultValue": "mentions",
         "options": [
-          { "value": "mentions", "label": "Only when I am mentioned" },
-          { "value": "all", "label": "Every message" }
+          {
+            "value": "mentions",
+            "label": "Only when I am mentioned"
+          },
+          {
+            "value": "all",
+            "label": "Every message"
+          }
         ],
         "description": "Direct messages always notify.",
         "section": "Notifications"

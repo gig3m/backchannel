@@ -9,31 +9,47 @@ Item {
   property var service: null
   property var bar: null
   property bool opened: false
+  property bool menuMode: false
   signal closeRequested()
+  signal showConversations()
 
   readonly property bool hasTextFocus: (list.visible && list.hasTextFocus) || (conv.visible && conv.hasTextFocus) || (setup.visible && setup.hasTextFocus)
   readonly property bool loggedIn: service ? service.loggedIn : false
 
-  implicitHeight: loggedIn ? Style.space(560) : setup.implicitHeight
+  implicitHeight: menuMode ? menu.implicitHeight : loggedIn ? Style.space(560) : setup.implicitHeight
 
   function openConversation(id) { conv.open(id, ""); Qt.callLater(conv.focusComposer) }
   // Escape: back out of a conversation first, then close.
   function handleClose() {
+    if (root.menuMode) return false
     if (conv.visible) { conv.convId = ""; return true }
     return false
   }
-  onOpenedChanged: if (opened && loggedIn && !conv.visible) Qt.callLater(list.focusSearch)
+  onOpenedChanged: if (opened && loggedIn && !conv.visible && !menuMode) Qt.callLater(list.focusSearch)
+  onMenuModeChanged: {
+    if (menuMode) { menu.reset(); Qt.callLater(function() { menu.forceActiveFocus() }) }
+    else if (opened && loggedIn && !conv.visible) Qt.callLater(list.focusSearch)
+  }
+
+  BarMenu {
+    id: menu
+    anchors.fill: parent
+    visible: root.menuMode
+    service: root.service
+    onCloseRequested: root.closeRequested()
+    onShowConversations: root.showConversations()
+  }
 
   SetupView {
     id: setup
     anchors.fill: parent
-    visible: !root.loggedIn
+    visible: !root.loggedIn && !root.menuMode
     service: root.service
   }
 
   Item {
     anchors.fill: parent
-    visible: root.loggedIn
+    visible: root.loggedIn && !root.menuMode
 
     Rectangle {
       id: header

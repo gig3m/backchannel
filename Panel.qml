@@ -23,7 +23,23 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  onOpenedChanged: if (opened && service) service.ensureDaemon()
+  // Right-click opens the popup as a menu; every other way in shows the
+  // conversations.
+  property bool menuMode: false
+  onOpenedChanged: {
+    if (opened && service) service.ensureDaemon()
+    if (!opened) menuMode = false
+  }
+  function openMenu() {
+    if (root.opened && root.menuMode) { root.close(); return }
+    root.menuMode = true
+    if (!root.opened) root.open()
+  }
+  function openPopup() {
+    if (root.opened && !root.menuMode) { root.close(); return }
+    root.menuMode = false
+    if (!root.opened) root.open()
+  }
 
   // Scripts and keybindings:
   //   omarchy-shell gig3m.backchannel toggle
@@ -32,7 +48,8 @@ Panel {
     target: root.ipcTarget
     function open(): void { root.open() }
     function close(): void { root.close() }
-    function toggle(): void { root.toggle() }
+    function toggle(): void { root.openPopup() }
+    function menu(): void { root.openMenu() }
     function app(): void { if (root.service) root.service.openWindow() }
     function status(): string {
       var s = root.service
@@ -53,9 +70,12 @@ Panel {
     tooltipText: "Backchannel: " + (root.service ? root.service.stateText : "starting")
       + (root.mentionTotal > 0 ? " · " + root.mentionTotal + " for you" : "")
       + (root.unreadTotal > 0 ? " · " + root.unreadTotal + " unread" : "")
+    // Left click does what the setting says; middle click the other one.
     onPressed: function(b) {
-      if (b === Qt.MiddleButton) { if (root.service) root.service.openWindow() }
-      else root.toggle()
+      if (b === Qt.RightButton) { root.openMenu(); return }
+      var windowFirst = root.service && root.service.clickAction === "window"
+      if ((b === Qt.MiddleButton) === windowFirst) root.openPopup()
+      else { root.close(); if (root.service) root.service.openWindow() }
     }
   }
 
@@ -66,13 +86,13 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(420))
+    contentWidth: panel.fittedContentWidth(root.menuMode ? Style.space(280) : Style.space(420))
     contentHeight: panel.fittedContentHeight(body.implicitHeight, Style.space(640))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      blocked: body.hasTextFocus
+      blocked: body.hasTextFocus || root.menuMode
       onCloseRequested: { if (!body.handleClose()) root.close() }
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
@@ -83,7 +103,9 @@ Panel {
         service: root.service
         bar: root.bar
         opened: root.opened
+        menuMode: root.menuMode
         onCloseRequested: root.close()
+        onShowConversations: root.menuMode = false
       }
     }
   }

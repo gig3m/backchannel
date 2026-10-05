@@ -62,7 +62,9 @@ To launch the window from the app launcher, copy
 
 | | |
 |---|---|
-| Open the window | middle-click the bar glyph, or `omarchy-shell shell summon gig3m.backchannel '{}'` |
+| Open the window | click the bar glyph (or middle-click, depending on the setting below), or `omarchy-shell shell summon gig3m.backchannel '{}'` |
+| Bar menu | right-click the glyph, or `omarchy-shell gig3m.backchannel menu` |
+| Choose what a click opens | right-click → Click opens, or the widget settings (popup by default; middle-click opens the other) |
 | Toggle the popup | `omarchy-shell gig3m.backchannel toggle` (bind it in `~/.config/hypr/bindings.conf`) |
 | Jump to a conversation | Ctrl+K in the window, or type in the popup |
 | Send / new line | Enter / Shift+Enter |

@@ -40,7 +40,31 @@ Item {
     }
     return null
   }
+  // Values applied ahead of the shell.json round-trip, so a toggle in the
+  // menu shows its new state at once.
+  property var overrides: ({})
+  onLayoutEntryChanged: {
+    var e = layoutEntry, o = root.overrides, keep = {}, changed = false
+    for (var k in o) { if (e && e[k] === o[k]) changed = true; else keep[k] = o[k] }
+    if (changed) root.overrides = keep
+  }
+  // Persist through the shell's inline writer (what its own bar gestures
+  // use); fall back to `omarchy-bar-set` per key.
+  function set(key, value) {
+    var o = Object.assign({}, root.overrides); o[key] = value; root.overrides = o
+    if (shell && typeof shell.updateEntryInline === "function" && layoutEntry) {
+      var merged = {}
+      for (var k in layoutEntry) if (k !== "id") merged[k] = layoutEntry[k]
+      merged[key] = value
+      shell.updateEntryInline(pluginId, merged)
+      return
+    }
+    var argv = ["/usr/bin/omarchy-bar", "set", pluginId, key, typeof value === "string" ? value : JSON.stringify(value)]
+    if (typeof value !== "string") argv.push("--json")
+    Quickshell.execDetached(argv)
+  }
   function setting(key, fallback) {
+    if (root.overrides[key] !== undefined) return root.overrides[key]
     var e = layoutEntry
     if (e && e[key] !== undefined && e[key] !== null) return e[key]
     if (defaults && defaults[key] !== undefined) return defaults[key]
@@ -54,6 +78,7 @@ Item {
     if (s === "true" || s === "1" || s === "on" || s === "yes") return true
     return fallback
   }
+  readonly property string clickAction: String(setting("clickAction", "popup")) === "window" ? "window" : "popup"
   readonly property bool notificationsEnabled: flag("notifications", true)
   readonly property bool notifyAllChannels: String(setting("notifyChannels", "mentions")) === "all"
   readonly property bool autostartDaemon: flag("autostartDaemon", true)
@@ -316,6 +341,14 @@ Item {
       }
     }
   }
+
+  function markAllRead() {
+    for (var i = 0; i < root.conversations.length; i++) {
+      var c = root.conversations[i]
+      if (c.unread > 0 && c.latest) root.request("mark", { conv: c.id, ts: c.latest }, null)
+    }
+  }
+  function restartDaemon() { Quickshell.execDetached(["systemctl", "--user", "restart", root.daemonUnit + ".service"]) }
 
   function history(convId, before, cb) { root.request("history", { conv: convId, before: before || "", limit: 50 }, cb) }
   function replies(convId, ts, cb) { root.request("replies", { conv: convId, ts: ts }, cb) }
