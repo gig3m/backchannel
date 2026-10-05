@@ -1,0 +1,36 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  daemon:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: daemon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: JSON is valid
+        run: |
+          for f in manifest.json slack-app-manifest.json; do python3 -m json.tool "$f" > /dev/null; done
+      - name: Entry points exist
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          m = json.load(open("manifest.json"))
+          missing = [p for p in m["entryPoints"].values() if not os.path.isfile(p)]
+          sys.exit("missing: " + ", ".join(missing) if missing else 0)
+          PY

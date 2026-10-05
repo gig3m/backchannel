@@ -1,0 +1,21 @@
+# Maintainer: Kyle Arrington <kyle@arrington.co>
+pkgname=backchanneld-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Slack session daemon for the Backchannel Omarchy plugin (prebuilt)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/gig3m/backchannel"
+license=('MIT')
+provides=('backchanneld')
+conflicts=('backchanneld')
+source_x86_64=("$url/releases/download/v$pkgver/backchanneld-$pkgver-linux-amd64.tar.gz")
+source_aarch64=("$url/releases/download/v$pkgver/backchanneld-$pkgver-linux-arm64.tar.gz")
+sha256sums_x86_64=('SKIP') # filled in by scripts/release.sh
+sha256sums_aarch64=('SKIP')
+
+package() {
+  install -Dm755 backchanneld "$pkgdir/usr/bin/backchanneld"
+  install -Dm644 backchanneld.service "$pkgdir/usr/lib/systemd/user/backchanneld.service"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

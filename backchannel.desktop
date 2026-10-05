@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Backchannel
+Comment=Slack for Omarchy
+Exec=omarchy-shell shell summon gig3m.backchannel {}
+Icon=internet-chat
+Terminal=false
+Categories=Network;InstantMessaging;
+StartupWMClass=org.quickshell

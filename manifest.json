@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "id": "gig3m.backchannel",
+  "name": "Backchannel",
+  "version": "0.1.0",
+  "author": "gig3m",
+  "license": "MIT",
+  "description": "Slack in the Omarchy bar and as a window, through a Slack app you own. The backchanneld daemon holds the tokens; the shell never sees them.",
+  "kinds": [
+    "service",
+    "bar-widget",
+    "panel"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "Panel.qml",
+    "panel": "Window.qml"
+  },
+  "barWidget": {
+    "displayName": "Backchannel",
+    "description": "Slack: unread and mention counts in the bar, conversations and a composer in the popup; middle-click opens the full window.",
+    "category": "Communication",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "notifications": true,
+      "notifyChannels": "mentions",
+      "autostartDaemon": true,
+      "showAvatars": true,
+      "hideQuietChannels": false
+    },
+    "schema": [
+      {
+        "key": "notifications",
+        "type": "boolean",
+        "label": "Desktop notifications",
+        "defaultValue": true,
+        "description": "For conversations no Backchannel view is showing.",
+        "section": "Notifications"
+      },
+      {
+        "key": "notifyChannels",
+        "type": "enum",
+        "label": "Notify for channel messages",
+        "defaultValue": "mentions",
+        "options": [
+          { "value": "mentions", "label": "Only when I am mentioned" },
+          { "value": "all", "label": "Every message" }
+        ],
+        "description": "Direct messages always notify.",
+        "section": "Notifications"
+      },
+      {
+        "key": "autostartDaemon",
+        "type": "boolean",
+        "label": "Start the daemon when needed",
+        "defaultValue": true,
+        "description": "Runs 'systemctl --user start backchanneld' when it is installed but not running.",
+        "section": "Daemon"
+      },
+      {
+        "key": "showAvatars",
+        "type": "boolean",
+        "label": "Show avatars",
+        "defaultValue": true,
+        "section": "Appearance"
+      },
+      {
+        "key": "hideQuietChannels",
+        "type": "boolean",
+        "label": "Hide channels with nothing unread",
+        "defaultValue": false,
+        "description": "The sidebar search still finds them.",
+        "section": "Appearance"
+      }
+    ]
+  },
+  "keepLoaded": true
+}

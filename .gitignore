@@ -1,0 +1,6 @@
+/daemon/backchanneld
+/daemon/dist/
+*.pkg.tar.zst
+/daemon/packaging/**/src/
+/daemon/packaging/**/pkg/
+/daemon/packaging/**/*.tar.gz

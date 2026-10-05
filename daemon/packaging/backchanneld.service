@@ -1,0 +1,25 @@
+[Unit]
+Description=Backchannel daemon (Slack session for the Omarchy plugin)
+Documentation=https://github.com/gig3m/backchannel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/backchanneld
+Restart=on-failure
+RestartSec=5
+# The daemon needs the network, its socket in $XDG_RUNTIME_DIR, and its own
+# state (tokens) and cache (downloaded images) directories; it reads files
+# from home only to upload them.
+StateDirectory=backchanneld
+StateDirectoryMode=0700
+CacheDirectory=backchanneld
+CacheDirectoryMode=0700
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%t
+
+[Install]
+WantedBy=default.target
