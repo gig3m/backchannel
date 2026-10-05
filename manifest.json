@@ -28,7 +28,9 @@
       "notifyChannels": "mentions",
       "autostartDaemon": true,
       "showAvatars": true,
-      "hideQuietChannels": false
+      "hideQuietChannels": false,
+      "muted": [],
+      "favourites": []
     },
     "schema": [
       {

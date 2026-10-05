@@ -97,14 +97,27 @@ Item {
   readonly property string userId: status.user_id || ""
   readonly property string teamName: status.team || ""
 
+  // Mute and favourites live in the plugin's settings, not in Slack: the
+  // public API has neither. Muted conversations neither notify nor count.
+  readonly property var muted: { var v = setting("muted", []); return Array.isArray(v) ? v : [] }
+  readonly property var favourites: { var v = setting("favourites", []); return Array.isArray(v) ? v : [] }
+  function isMuted(id) { return root.muted.indexOf(id) >= 0 }
+  function isFavourite(id) { return root.favourites.indexOf(id) >= 0 }
+  function toggleIn(key, list, id) {
+    var next = list.indexOf(id) >= 0 ? list.filter(function(x) { return x !== id }) : list.concat([id])
+    root.set(key, next)
+  }
+  function toggleMute(id) { root.toggleIn("muted", root.muted, id) }
+  function toggleFavourite(id) { root.toggleIn("favourites", root.favourites, id) }
+
   readonly property int unreadTotal: {
     var n = 0
-    for (var i = 0; i < conversations.length; i++) if (conversations[i].unread > 0) n++
+    for (var i = 0; i < conversations.length; i++) if (conversations[i].unread > 0 && !isMuted(conversations[i].id)) n++
     return n
   }
   readonly property int mentionTotal: {
     var n = 0
-    for (var i = 0; i < conversations.length; i++) n += Number(conversations[i].mentions) || 0
+    for (var i = 0; i < conversations.length; i++) if (!isMuted(conversations[i].id)) n += Number(conversations[i].mentions) || 0
     return n
   }
   readonly property string stateText: {
@@ -350,6 +363,50 @@ Item {
   }
   function restartDaemon() { Quickshell.execDetached(["systemctl", "--user", "restart", root.daemonUnit + ".service"]) }
 
+  function edit(convId, ts, text, cb) { root.request("edit", { conv: convId, ts: ts, text: text }, cb) }
+  function deleteMessage(convId, ts, cb) { root.request("delete", { conv: convId, ts: ts }, cb) }
+  function markUnread(convId, ts, cb) { root.request("mark_unread", { conv: convId, ts: ts || "" }, cb) }
+  function closeConversation(convId, cb) { root.request("close", { conv: convId }, cb) }
+  function leaveConversation(convId, cb) { root.request("leave", { conv: convId }, cb) }
+
+  // https://team.slack.com/archives/C0123/p1700000000000100, with the
+  // thread for a reply.
+  function permalink(convId, ts, threadTs) {
+    var base = String(root.status.url || "")
+    if (base === "" || !convId) return ""
+    if (base.charAt(base.length - 1) !== "/") base += "/"
+    var url = base + "archives/" + convId
+    if (ts) url += "/p" + String(ts).replace(".", "")
+    if (ts && threadTs && threadTs !== ts) url += "?thread_ts=" + threadTs + "&cid=" + convId
+    return url
+  }
+
+  // ---------- clipboard and files ----------
+
+  function copyText(t) {
+    if (t === undefined || t === null || String(t) === "") return
+    Quickshell.execDetached(["wl-copy", "--", String(t)])
+  }
+  function copyImage(fileId) {
+    root.filePath(fileId, function(p) {
+      if (p) Quickshell.execDetached(["sh", "-c", 'exec wl-copy < "$1"', "sh", p])
+      else root.toast("Could not fetch the image")
+    })
+  }
+  // Save into ~/Downloads, never overwriting: "name (2).ext" and so on.
+  function saveFile(fileId, name) {
+    root.filePath(fileId, function(p) {
+      if (!p) { root.toast("Could not fetch the file"); return }
+      var safe = String(name || "file").replace(/[\/\u0000-\u001f]/g, "_").replace(/^\.+/, "") || "file"
+      Quickshell.execDetached(["sh", "-c",
+        'd="${XDG_DOWNLOAD_DIR:-$HOME/Downloads}"; mkdir -p "$d"; n="$2"; b="${n%.*}"; e="${n##*.}"; [ "$e" = "$n" ] && e="" || e=".$e"; t="$d/$n"; i=2; while [ -e "$t" ]; do t="$d/$b ($i)$e"; i=$((i+1)); done; cp -- "$1" "$t" && /usr/share/omarchy/bin/omarchy-notification-send --app-name Backchannel -g 󰇚 "Saved to Downloads" "$(basename "$t")"',
+        "sh", p, safe])
+    })
+  }
+  function toast(text) {
+    Quickshell.execDetached(["/usr/share/omarchy/bin/omarchy-notification-send", "--app-name", "Backchannel", "-g", root.glyph, Format.notifyText(text)])
+  }
+
   function history(convId, before, cb) { root.request("history", { conv: convId, before: before || "", limit: 50 }, cb) }
   function replies(convId, ts, cb) { root.request("replies", { conv: convId, ts: ts }, cb) }
   function send(convId, text, threadTs, cb) { root.request("send", { conv: convId, text: text, thread_ts: threadTs || "" }, cb) }
@@ -401,7 +458,7 @@ Item {
 
   // Omarchy's notifier: themed, and clicking it opens the conversation.
   function notify(ev) {
-    if (!root.notificationsEnabled) return
+    if (!root.notificationsEnabled || root.isMuted(ev.conv)) return
     var c = root.conversationById(ev.conv)
     var m = ev.message || {}
     var direct = ev.direct === true

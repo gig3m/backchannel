@@ -32,6 +32,84 @@ Item {
 
   ListModel { id: messages }
 
+  // ---------- editing ----------
+
+  property string editingTs: ""
+  function startEdit(m) {
+    if (!m || !m.own) return
+    root.editingTs = m.ts
+    composer.text = m.text || ""
+    composer.forceActiveFocus()
+    composer.cursorPosition = composer.text.length
+  }
+  function cancelEdit() { root.editingTs = ""; composer.text = "" }
+  function editLast() {
+    for (var i = 0; i < messages.count; i++) {
+      var m = JSON.parse(messages.get(i).json)
+      if (m.own && !m.subtype) { root.startEdit(m); return true }
+    }
+    return false
+  }
+
+  // ---------- right-click on a message ----------
+
+  function showMessageMenu(m, index, source, x, y) {
+    var s = root.service
+    if (!s) return
+    var system = !!m.subtype && ["bot_message", "thread_broadcast", "file_share", "me_message"].indexOf(m.subtype) < 0
+    var link = s.permalink(root.convId, m.ts, m.thread_ts || "")
+    var items = []
+    if (!system) items.push({ emojis: [{ n: "+1", e: "👍" }, { n: "white_check_mark", e: "✅" }, { n: "eyes", e: "👀" }, { n: "joy", e: "😂" }, { n: "pray", e: "🙏" }, { n: "tada", e: "🎉" }] })
+    if (!system && root.threadTs === "") items.push({ id: "thread", icon: "󰍪", label: (m.reply_count || 0) > 0 ? "Open thread" : "Reply in thread" })
+    items.push({ sep: true })
+    items.push({ id: "copy", icon: "󰆏", label: "Copy text", enabled: (m.text || "") !== "" })
+    items.push({ id: "link", icon: "󰌷", label: "Copy link", enabled: link !== "" })
+    items.push({ id: "open", icon: "󰏌", label: "Open in Slack", enabled: link !== "" })
+    if (root.threadTs === "") items.push({ id: "unread", icon: "󰇮", label: "Mark unread from here" })
+    var files = m.files || []
+    if (files.length > 0) {
+      items.push({ sep: true })
+      for (var i = 0; i < files.length && i < 4; i++) {
+        if (files[i].image) items.push({ id: "copyimg:" + i, icon: "󰋩", label: "Copy image" + (files.length > 1 ? " " + (i + 1) : "") })
+        items.push({ id: "save:" + i, icon: "󰇚", label: "Save " + files[i].name })
+      }
+    }
+    if (m.own && !system) {
+      items.push({ sep: true })
+      items.push({ id: "edit", icon: "󰏫", label: "Edit message" })
+      items.push({ id: "delete", icon: "󰆴", label: "Delete message…", confirm: "Click again to delete" })
+    }
+    msgMenu.show(source, x, y, items, { m: m, index: index })
+  }
+
+  function closeMenus() { msgMenu.close() }
+
+  ActionMenu {
+    id: msgMenu
+    parent: Overlay.overlay
+    onTriggered: function(id, ctx) {
+      var s = root.service, m = ctx.m
+      if (!s || !m) return
+      if (id.indexOf("react:") === 0) { s.react(root.convId, m.ts, id.substring(6), true, null); return }
+      if (id.indexOf("copyimg:") === 0) { s.copyImage(m.files[Number(id.substring(8))].id); return }
+      if (id.indexOf("save:") === 0) { var f = m.files[Number(id.substring(5))]; s.saveFile(f.id, f.name); return }
+      switch (id) {
+      case "thread": root.openThread(m.ts); break
+      case "copy": s.copyText(m.text); break
+      case "link": s.copyText(s.permalink(root.convId, m.ts, m.thread_ts || "")); break
+      case "open": s.openUrl(s.permalink(root.convId, m.ts, m.thread_ts || "")); break
+      case "unread": s.markUnread(root.convId, m.ts, function(r) { if (!r.ok) s.toast(r.error) }); root.holdRead = true; break
+      case "edit": root.startEdit(m); break
+      case "delete": s.deleteMessage(root.convId, m.ts, function(r) { if (!r.ok) s.toast(r.error) }); break
+      }
+    }
+  }
+
+  // After "Mark unread from here" the view must not mark the conversation
+  // read again until the user comes back to it.
+  property bool holdRead: false
+  onHoldReadChanged: publishViewing()
+
   function open(convId, threadTs) {
     root.convId = convId || ""
     root.threadTs = threadTs || ""
@@ -39,6 +117,8 @@ Item {
   }
 
   function reload() {
+    root.holdRead = false
+    root.editingTs = ""
     messages.clear()
     root.error = ""
     root.hasMore = false
@@ -74,13 +154,18 @@ Item {
   }
 
   function markNewest() {
+    if (root.holdRead) return
     if (root.active && root.threadTs === "" && messages.count > 0 && service) service.markRead(root.convId, messages.get(0).ts)
   }
 
   function publishViewing() {
-    if (service) service.setViewing(root.viewId, root.active && root.threadTs === "" ? root.convId : "")
+    if (service) service.setViewing(root.viewId, root.active && root.threadTs === "" && !root.holdRead ? root.convId : "")
   }
-  onActiveChanged: { publishViewing(); if (active) markNewest() }
+  onActiveChanged: {
+    if (!active) root.holdRead = false
+    publishViewing()
+    if (active) markNewest()
+  }
   Component.onDestruction: if (service) service.setViewing(root.viewId, "")
 
   function indexOf(ts) {
@@ -219,6 +304,7 @@ Item {
       // The message above is the next one in the model (older).
       older: index + 1 < messages.count ? JSON.parse(messages.get(index + 1).json) : null
       onOpenThread: function(ts) { root.openThread(ts) }
+      onContextRequested: function(source, x, y) { root.showMessageMenu(msg, index, source, x, y) }
     }
 
     footer: Item {
@@ -281,7 +367,7 @@ Item {
     height: Math.min(Style.space(160), composer.implicitHeight) + (errorText.visible ? errorText.implicitHeight + Style.space(4) : 0)
     color: Util.alpha(Color.foreground, 0.05)
     border.width: 1
-    border.color: composer.activeFocus ? Color.accent : Util.alpha(Color.foreground, 0.15)
+    border.color: root.editingTs !== "" || composer.activeFocus ? Color.accent : Util.alpha(Color.foreground, 0.15)
     visible: root.convId !== ""
 
     ScrollView {
@@ -305,12 +391,28 @@ Item {
           if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !(event.modifiers & Qt.ShiftModifier)) {
             event.accepted = true
             root.submit()
+          } else if (event.key === Qt.Key_Up && composer.text === "" && root.editingTs === "") {
+            if (root.editLast()) event.accepted = true
+          } else if (event.key === Qt.Key_Escape && root.editingTs !== "") {
+            event.accepted = true
+            root.cancelEdit()
           } else if (event.key === Qt.Key_Escape && root.threadTs !== "") {
             event.accepted = true
             root.closeRequested()
           }
         }
       }
+    }
+    Text {
+      id: editLabel
+      visible: root.editingTs !== ""
+      anchors.bottom: parent.top
+      anchors.left: parent.left
+      anchors.bottomMargin: Style.space(3)
+      text: "Editing · Enter to save · Esc to cancel"
+      color: Color.accent
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
     }
     Text {
       id: errorText
@@ -327,7 +429,18 @@ Item {
 
   function submit() {
     var t = composer.text
-    if (t.trim() === "" || !service) return
+    if (!service) return
+    if (root.editingTs !== "") {
+      var ts = root.editingTs
+      if (t.trim() === "") return
+      root.sendError = ""
+      service.edit(root.convId, ts, t, function(r) {
+        if (!r.ok) root.sendError = r.error || "not saved"
+        else if (root.editingTs === ts) root.cancelEdit()
+      })
+      return
+    }
+    if (t.trim() === "") return
     root.sendError = ""
     var keep = t
     composer.text = ""

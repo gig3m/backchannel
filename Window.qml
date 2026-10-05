@@ -60,7 +60,7 @@ Item {
     onVisibleChanged: {
       if (!visible && !root.closingFromHost && root.shell && typeof root.shell.hide === "function")
         root.shell.hide(root.service ? root.service.pluginId : "gig3m.backchannel")
-      if (!visible) setup.clearSecrets()
+      if (!visible) { setup.clearSecrets(); sidebar.closeMenus(); main.closeMenus(); thread.closeMenus() }
     }
 
     SetupView {
@@ -143,6 +143,7 @@ Item {
           anchors.bottom: parent.bottom
           service: root.service
           onPicked: function(id) { root.openConversation(id) }
+          onConvLeft: function(id) { if (main.convId === id) { main.open("", ""); thread.convId = ""; sidebar.selectedId = "" } }
         }
       }
 

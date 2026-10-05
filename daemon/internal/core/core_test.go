@@ -68,3 +68,18 @@ func TestEscapeOutgoing(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestTsBefore(t *testing.T) {
+	cases := map[string]string{
+		"1700000000.000100": "1700000000.000099",
+		"1700000000.000000": "1699999999.999999",
+		"1700000000.123456": "1700000000.123455",
+		"bad":               "",
+		"1.23":              "",
+	}
+	for in, want := range cases {
+		if got := tsBefore(in); got != want {
+			t.Errorf("tsBefore(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

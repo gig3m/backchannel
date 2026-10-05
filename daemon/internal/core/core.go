@@ -201,6 +201,16 @@ func (d *Daemon) Handle(cmd string, raw json.RawMessage) (any, error) {
 		return d.upload(ctx, f.Conv, f.Path, f.Text, f.ThreadTS)
 	case "open_dm":
 		return d.openDM(ctx, f.User)
+	case "edit":
+		return nil, d.edit(ctx, f.Conv, f.TS, f.Text)
+	case "delete":
+		return nil, d.deleteMessage(ctx, f.Conv, f.TS)
+	case "mark_unread":
+		return nil, d.markUnread(ctx, f.Conv, f.TS)
+	case "close":
+		return nil, d.closeConv(ctx, f.Conv)
+	case "leave":
+		return nil, d.leave(ctx, f.Conv)
 	}
 	return nil, fmt.Errorf("unknown command %q", cmd)
 }

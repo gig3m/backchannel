@@ -25,7 +25,10 @@ Item {
     if (conv.visible) { conv.convId = ""; return true }
     return false
   }
-  onOpenedChanged: if (opened && loggedIn && !conv.visible && !menuMode) Qt.callLater(list.focusSearch)
+  onOpenedChanged: {
+    if (!opened) { list.closeMenus(); conv.closeMenus() }
+    if (opened && loggedIn && !conv.visible && !menuMode) Qt.callLater(list.focusSearch)
+  }
   onMenuModeChanged: {
     if (menuMode) { menu.reset(); Qt.callLater(function() { menu.forceActiveFocus() }) }
     else if (opened && loggedIn && !conv.visible) Qt.callLater(list.focusSearch)

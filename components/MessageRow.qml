@@ -14,6 +14,7 @@ Item {
   property bool compact: false
 
   signal openThread(string ts)
+  signal contextRequested(var source, real x, real y)
 
   readonly property color fg: Color.foreground
   readonly property color muted: Util.alpha(Color.foreground, 0.6)
@@ -283,5 +284,15 @@ Item {
       }
       MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (parent.f && row.service) row.service.openUrl(parent.f.link) }
     }
+  }
+
+  // Right-click anywhere on the message, images included. Left clicks and
+  // text selection pass through.
+  MouseArea {
+    id: ctxArea
+    anchors.fill: parent
+    z: 3
+    acceptedButtons: Qt.RightButton
+    onClicked: function(ev) { row.contextRequested(ctxArea, ev.x, ev.y) }
   }
 }

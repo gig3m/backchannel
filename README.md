@@ -70,13 +70,18 @@ To launch the window from the app launcher, copy
 | Send / new line | Enter / Shift+Enter |
 | Reply in a thread | hover a message, 󰍪 |
 | Upload | drop files onto a conversation |
+| Edit your last message | Up in an empty composer (Esc cancels) |
+| Right-click a conversation | mark read/unread, favourite, mute, copy link, open in Slack, close DM / leave channel |
+| Right-click a message | react, reply in thread, copy text or link, open in Slack, mark unread from here, copy or save files; edit or delete your own |
 | Status for scripts | `omarchy-shell gig3m.backchannel status` |
 | Daemon logs | `journalctl --user -u backchanneld -f` |
 
 ## Not yet
 
-Backchannel is young. Not there yet: search, editing and deleting your own messages,
-`@`-completion in the composer, custom emoji images, Slack's block layouts beyond their
+Favourites and mute are kept by Backchannel, not Slack (the public API has neither), so
+the official app won't see them.
+
+Backchannel is young. Not there yet: search, `@`-completion in the composer, custom emoji images, Slack's block layouts beyond their
 text, multiple workspaces at once, and huddles (Slack has no public API for them).
 Contributions welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
