@@ -66,7 +66,10 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: root.mentionTotal > 0 ? root.glyph + " " + root.mentionTotal : root.glyph
-    dimmed: !root.loggedIn || root.unreadTotal === 0
+    // Dim only when Backchannel can't work (signed out, daemon down); turn
+    // the bar's urgent color when a DM or mention is waiting.
+    dimmed: !root.loggedIn
+    active: root.mentionTotal > 0
     tooltipText: "Backchannel: " + (root.service ? root.service.stateText : "starting")
       + (root.mentionTotal > 0 ? " · " + root.mentionTotal + " for you" : "")
       + (root.unreadTotal > 0 ? " · " + root.unreadTotal + " unread" : "")
