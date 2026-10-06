@@ -14,6 +14,7 @@ Rectangle {
   property string ts: ""
   property string threadTs: ""
   property string path: ""
+  property bool failed: false
   readonly property bool shown: visible
 
   visible: false
@@ -27,9 +28,14 @@ Rectangle {
     root.ts = ts || ""
     root.threadTs = threadTs || ""
     root.path = ""
+    root.failed = false
     root.visible = true
     root.forceActiveFocus()
-    if (service && file) service.filePath(file.id, function(p) { if (root.file === file) root.path = p })
+    if (service && file) service.filePath(file.id, function(p) {
+      if (root.file !== file) return
+      root.path = p
+      root.failed = p === ""
+    })
   }
   function hide() { root.visible = false; root.file = null; root.path = "" }
 
@@ -121,7 +127,7 @@ Rectangle {
     Text {
       anchors.centerIn: parent
       visible: img.status !== Image.Ready
-      text: img.status === Image.Error ? "Could not show this image." : "Loading…"
+      text: root.failed ? "Could not download this image from Slack." : img.status === Image.Error ? "Could not show this image." : "Loading…"
       color: Util.alpha(Color.foreground, 0.6)
       font.family: Style.font.family
       font.pixelSize: Style.font.body

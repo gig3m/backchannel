@@ -252,7 +252,17 @@ Item {
       height: ready ? Math.round(img.sourceSize.height * scale) : Style.space(36)
       implicitWidth: width
       implicitHeight: height
-      Component.onCompleted: if (f && row.service) row.service.filePath(f.id, function(p) { box.path = p })
+      // A Loader parents its item after creating it, so `f` can still be
+      // null at onCompleted; fetch whenever it (or the service) arrives.
+      property bool requested: false
+      function load() {
+        if (box.requested || !box.f || !row.service) return
+        box.requested = true
+        var id = box.f.id
+        row.service.filePath(id, function(p) { if (box.f && box.f.id === id) box.path = p })
+      }
+      onFChanged: { box.requested = false; box.path = ""; load() }
+      Component.onCompleted: load()
       Image {
         id: img
         anchors.fill: parent
