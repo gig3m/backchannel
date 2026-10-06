@@ -110,6 +110,8 @@ Item {
       active: root.opened && visible
       onCloseRequested: { conv.convId = ""; Qt.callLater(list.focusSearch) }
       onOpenThread: function(ts) { root.service.openWindow({ conv: conv.convId, thread: ts }); root.closeRequested() }
+      // Too small for a preview here: hand the image to the viewer.
+      onPreviewImage: function(file) { root.service.openFile(file.id); root.closeRequested() }
     }
   }
 }

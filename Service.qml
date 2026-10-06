@@ -387,6 +387,13 @@ Item {
     if (t === undefined || t === null || String(t) === "") return
     Quickshell.execDetached(["wl-copy", "--", String(t)])
   }
+  // Open a file in its default application (imv for images on Omarchy).
+  function openFile(fileId) {
+    root.filePath(fileId, function(p) {
+      if (p) Quickshell.execDetached(["xdg-open", p])
+      else root.toast("Could not fetch the file")
+    })
+  }
   function copyImage(fileId) {
     root.filePath(fileId, function(p) {
       if (p) Quickshell.execDetached(["sh", "-c", 'exec wl-copy < "$1"', "sh", p])
@@ -399,7 +406,7 @@ Item {
       if (!p) { root.toast("Could not fetch the file"); return }
       var safe = String(name || "file").replace(/[\/\u0000-\u001f]/g, "_").replace(/^\.+/, "") || "file"
       Quickshell.execDetached(["sh", "-c",
-        'd="${XDG_DOWNLOAD_DIR:-$HOME/Downloads}"; mkdir -p "$d"; n="$2"; b="${n%.*}"; e="${n##*.}"; [ "$e" = "$n" ] && e="" || e=".$e"; t="$d/$n"; i=2; while [ -e "$t" ]; do t="$d/$b ($i)$e"; i=$((i+1)); done; cp -- "$1" "$t" && /usr/share/omarchy/bin/omarchy-notification-send --app-name Backchannel -g 󰇚 "Saved to Downloads" "$(basename "$t")"',
+        'd="${XDG_DOWNLOAD_DIR:-$HOME/Downloads}"; mkdir -p "$d"; n="$2"; b="${n%.*}"; e="${n##*.}"; [ "$e" = "$n" ] && e="" || e=".$e"; t="$d/$n"; i=2; while [ -e "$t" ]; do t="$d/$b ($i)$e"; i=$((i+1)); done; cp -- "$1" "$t" || exit 1; ns=/usr/share/omarchy/bin/omarchy-notification-send; m="$(basename "$t") · click to open"; case "$(file -b --mime-type "$t")" in image/*) "$ns" --app-name Backchannel -g 󰇚 --image "$t" "Saved to Downloads" "$m" --exec xdg-open "$t";; *) "$ns" --app-name Backchannel -g 󰇚 "Saved to Downloads" "$m" --exec xdg-open "$t";; esac',
         "sh", p, safe])
     })
   }

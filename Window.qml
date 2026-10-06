@@ -60,7 +60,7 @@ Item {
     onVisibleChanged: {
       if (!visible && !root.closingFromHost && root.shell && typeof root.shell.hide === "function")
         root.shell.hide(root.service ? root.service.pluginId : "gig3m.backchannel")
-      if (!visible) { setup.clearSecrets(); sidebar.closeMenus(); main.closeMenus(); thread.closeMenus() }
+      if (!visible) { setup.clearSecrets(); sidebar.closeMenus(); main.closeMenus(); thread.closeMenus(); lightbox.hide() }
     }
 
     SetupView {
@@ -158,6 +158,7 @@ Item {
         viewId: "window"
         active: window.visible
         onOpenThread: function(ts) { thread.open(main.convId, ts); Qt.callLater(thread.focusComposer) }
+        onPreviewImage: function(file, ts, threadTs) { lightbox.show(file, main.convId, ts, threadTs) }
       }
       Text {
         anchors.centerIn: main
@@ -180,7 +181,16 @@ Item {
         viewId: "window-thread"
         active: window.visible && visible
         onCloseRequested: { thread.convId = ""; thread.threadTs = ""; main.focusComposer() }
+        onPreviewImage: function(file, ts, threadTs) { lightbox.show(file, thread.convId, ts, threadTs) }
         Rectangle { anchors.left: parent.left; width: 1; height: parent.height; color: Util.alpha(Color.foreground, 0.1) }
+      }
+
+      // ---- image preview ----
+      Lightbox {
+        id: lightbox
+        anchors.fill: parent
+        service: root.service
+        onVisibleChanged: if (!visible) Qt.callLater(main.focusComposer)
       }
 
       // ---- sign-out confirmation ----

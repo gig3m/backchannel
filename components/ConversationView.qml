@@ -20,6 +20,7 @@ Item {
 
   signal openThread(string ts)
   signal closeRequested()
+  signal previewImage(var file, string ts, string threadTs)
 
   readonly property var conv: service && convId ? service.conversationById(convId) : null
   readonly property string title: threadTs !== "" ? "Thread" : (service ? service.conversationName(conv) : "")
@@ -70,7 +71,8 @@ Item {
     if (files.length > 0) {
       items.push({ sep: true })
       for (var i = 0; i < files.length && i < 4; i++) {
-        if (files[i].image) items.push({ id: "copyimg:" + i, icon: "󰋩", label: "Copy image" + (files.length > 1 ? " " + (i + 1) : "") })
+        if (files[i].image) items.push({ id: "view:" + i, icon: "󰋩", label: "View image" + (files.length > 1 ? " " + (i + 1) : "") })
+        if (files[i].image) items.push({ id: "copyimg:" + i, icon: "󰆏", label: "Copy image" + (files.length > 1 ? " " + (i + 1) : "") })
         items.push({ id: "save:" + i, icon: "󰇚", label: "Save " + files[i].name })
       }
     }
@@ -91,6 +93,7 @@ Item {
       var s = root.service, m = ctx.m
       if (!s || !m) return
       if (id.indexOf("react:") === 0) { s.react(root.convId, m.ts, id.substring(6), true, null); return }
+      if (id.indexOf("view:") === 0) { root.previewImage(m.files[Number(id.substring(5))], m.ts, m.thread_ts || ""); return }
       if (id.indexOf("copyimg:") === 0) { s.copyImage(m.files[Number(id.substring(8))].id); return }
       if (id.indexOf("save:") === 0) { var f = m.files[Number(id.substring(5))]; s.saveFile(f.id, f.name); return }
       switch (id) {
@@ -305,6 +308,7 @@ Item {
       older: index + 1 < messages.count ? JSON.parse(messages.get(index + 1).json) : null
       onOpenThread: function(ts) { root.openThread(ts) }
       onContextRequested: function(source, x, y) { root.showMessageMenu(msg, index, source, x, y) }
+      onImageActivated: function(file) { root.previewImage(file, msg.ts, msg.thread_ts || "") }
     }
 
     footer: Item {

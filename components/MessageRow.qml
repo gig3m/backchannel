@@ -15,6 +15,7 @@ Item {
 
   signal openThread(string ts)
   signal contextRequested(var source, real x, real y)
+  signal imageActivated(var file)
 
   readonly property color fg: Color.foreground
   readonly property color muted: Util.alpha(Color.foreground, 0.6)
@@ -240,30 +241,41 @@ Item {
 
   Component {
     id: imageFile
+    // Up to 360×300, the image's own proportions, never scaled up.
     Item {
+      id: box
       property var f: parent ? parent.file : null
       property string path: ""
-      width: Math.min(img.status === Image.Ready ? img.paintedWidth : Style.space(240), Style.space(360))
-      height: img.status === Image.Ready ? img.paintedHeight : Style.space(40)
-      Component.onCompleted: if (f && row.service) row.service.filePath(f.id, function(p) { path = p })
+      readonly property bool ready: img.status === Image.Ready && img.sourceSize.width > 0
+      readonly property real scale: ready ? Math.min(1, Style.space(360) / img.sourceSize.width, Style.space(300) / img.sourceSize.height) : 1
+      width: ready ? Math.round(img.sourceSize.width * scale) : Style.space(240)
+      height: ready ? Math.round(img.sourceSize.height * scale) : Style.space(36)
+      implicitWidth: width
+      implicitHeight: height
+      Component.onCompleted: if (f && row.service) row.service.filePath(f.id, function(p) { box.path = p })
       Image {
         id: img
-        source: parent.path ? "file://" + parent.path : ""
-        width: Style.space(360)
-        height: Style.space(240)
+        anchors.fill: parent
+        source: box.path ? "file://" + box.path : ""
         fillMode: Image.PreserveAspectFit
-        horizontalAlignment: Image.AlignLeft
         asynchronous: true
+        smooth: true
+        mipmap: true
       }
-      Text {
-        visible: img.status !== Image.Ready
-        anchors.verticalCenter: parent.verticalCenter
-        text: "󰋩 " + (parent.f ? parent.f.name : "")
-        color: row.muted
-        font.family: Style.font.family
-        font.pixelSize: Style.font.bodySmall
+      Rectangle {
+        anchors.fill: parent
+        visible: !box.ready
+        color: Util.alpha(Color.foreground, 0.06)
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          x: Style.space(8)
+          text: "󰋩 " + (box.f ? box.f.name : "")
+          color: row.muted
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+        }
       }
-      MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (parent.f && row.service) row.service.openUrl(parent.f.link) }
+      MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (box.f) row.imageActivated(box.f) }
     }
   }
 
@@ -273,16 +285,19 @@ Item {
       property var f: parent ? parent.file : null
       width: fileLabel.implicitWidth + Style.space(16)
       height: fileLabel.implicitHeight + Style.space(8)
+      implicitWidth: width
+      implicitHeight: height
       color: Util.alpha(Color.foreground, 0.06)
       Text {
         id: fileLabel
         anchors.centerIn: parent
-        text: "󰈔 " + (parent.f ? parent.f.name + "  ·  " + Format.sizeText(parent.f.size) : "")
+        text: "󰈔 " + (parent.f ? parent.f.name + "  ·  " + Format.sizeText(parent.f.size) : "") + "   󰇚"
         color: row.fg
         font.family: Style.font.family
         font.pixelSize: Style.font.bodySmall
       }
-      MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (parent.f && row.service) row.service.openUrl(parent.f.link) }
+      // Click saves to Downloads; the notification opens it.
+      MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (parent.f && row.service) row.service.saveFile(parent.f.id, parent.f.name) }
     }
   }
 
