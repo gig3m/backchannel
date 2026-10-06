@@ -383,6 +383,35 @@ Item {
 
   // ---------- clipboard and files ----------
 
+  // bin/backchannel-helper: one JSON line per call.
+  readonly property string helperPath: pluginDir + "/bin/backchannel-helper"
+  Component {
+    id: helperProc
+    Process {
+      property var cb: null
+      property string out: ""
+      stdout: SplitParser { splitMarker: ""; onRead: function(d) { if (out.length < 65536) out += d } }
+      onExited: function() {
+        var r = null
+        try { r = JSON.parse(out) } catch (e) { r = { error: "helper: " + out.slice(0, 200) } }
+        if (cb) cb(r)
+        destroy()
+      }
+    }
+  }
+  function runHelper(args, cb) {
+    var p = helperProc.createObject(root, { cb: cb, command: ["/usr/bin/python3", "-I", root.helperPath].concat(args) })
+    p.running = true
+  }
+  // The desktop's file picker, through xdg-desktop-portal on D-Bus.
+  function pickFiles(cb) { root.runHelper(["pick", "Attach to Slack"], cb) }
+  // A clipboard image saved to a private file, or { image: false }.
+  function pasteImage(cb) { root.runHelper(["paste"], cb) }
+  function removeTemp(path) {
+    var dir = root.runtimeDir + "/backchannel-paste/"
+    if (String(path).indexOf(dir) === 0) Quickshell.execDetached(["rm", "-f", "--", String(path)])
+  }
+
   function copyText(t) {
     if (t === undefined || t === null || String(t) === "") return
     Quickshell.execDetached(["wl-copy", "--", String(t)])
@@ -484,5 +513,5 @@ Item {
     if (root.shell && typeof root.shell.summon === "function") root.shell.summon(root.pluginId, payload ? JSON.stringify(payload) : "{}")
   }
 
-  Component.onCompleted: checkInstalled()
+  Component.onCompleted: { checkInstalled(); runHelper(["clean"], null) }
 }

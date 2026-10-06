@@ -345,9 +345,7 @@ Item {
       for (var i = 0; i < drop.urls.length; i++) {
         var u = String(drop.urls[i])
         if (u.indexOf("file://") !== 0) continue
-        root.service.upload(root.convId, decodeURIComponent(u.substring(7)), "", root.threadTs, function(r) {
-          if (!r.ok) root.sendError = r.error || "upload failed"
-        })
+        root.attach(decodeURIComponent(u.substring(7)), false)
       }
     }
     Rectangle {
@@ -356,8 +354,83 @@ Item {
       color: Util.alpha(Color.accent, 0.12)
       border.width: 2
       border.color: Color.accent
-      Text { anchors.centerIn: parent; text: "Drop to upload"; color: Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.heading }
+      Text { anchors.centerIn: parent; text: "Drop to attach"; color: Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.heading }
     }
+  }
+
+  // ---------- attachments ----------
+
+  // Staged files: { path, name, image, temp }. Sent with the next Enter,
+  // the composer's text as the caption on the first.
+  property var attachments: []
+  property bool uploading: false
+  function attach(path, temp) {
+    path = String(path || "")
+    if (path === "" || path.charAt(0) !== "/") return
+    for (var i = 0; i < root.attachments.length; i++) if (root.attachments[i].path === path) return
+    var name = path.substring(path.lastIndexOf("/") + 1)
+    var image = /\.(png|jpe?g|gif|webp|bmp)$/i.test(name)
+    root.attachments = root.attachments.concat([{ path: path, name: name, image: image, temp: temp === true }])
+    composer.forceActiveFocus()
+  }
+  function unattach(index) {
+    var a = root.attachments[index]
+    if (a && a.temp && root.service) root.service.removeTemp(a.path)
+    var next = root.attachments.slice(); next.splice(index, 1); root.attachments = next
+  }
+  function clearAttachments() {
+    for (var i = 0; i < root.attachments.length; i++) if (root.attachments[i].temp && root.service) root.service.removeTemp(root.attachments[i].path)
+    root.attachments = []
+  }
+  onConvIdChanged: clearAttachments()
+
+  function pickFiles() {
+    if (!root.service) return
+    root.service.pickFiles(function(r) {
+      if (r && r.error) { root.sendError = r.error; return }
+      var ps = (r && r.paths) || []
+      for (var i = 0; i < ps.length; i++) root.attach(ps[i], false)
+    })
+  }
+  // Ctrl+V: an image on the clipboard is attached; anything else pastes
+  // as text, as usual.
+  function pasteClipboard() {
+    if (!root.service) { composer.paste(); return }
+    root.service.pasteImage(function(r) {
+      if (r && r.path) root.attach(r.path, true)
+      else if (r && r.error) root.sendError = r.error
+      else composer.paste()
+    })
+  }
+
+  // Upload one at a time so the caption lands on the first and the order
+  // holds.
+  function sendAttachments(caption) {
+    var list = root.attachments.slice()
+    var conv = root.convId, thread = root.threadTs
+    root.uploading = true
+    root.sendError = ""
+    var step = function(i) {
+      if (i >= list.length) {
+        root.uploading = false
+        root.attachments = []
+        return
+      }
+      var a = list[i]
+      root.service.upload(conv, a.path, i === 0 ? caption : "", thread, function(r) {
+        if (!r.ok) {
+          root.uploading = false
+          root.sendError = (r.error || "upload failed") + " (" + a.name + ")"
+          // Keep what has not gone yet, so it can be retried.
+          root.attachments = list.slice(i)
+          if (i === 0 && caption !== "" && composer.text === "") composer.text = caption
+          return
+        }
+        if (a.temp) root.service.removeTemp(a.path)
+        step(i + 1)
+      })
+    }
+    step(0)
   }
 
   // ---------- composer ----------
@@ -368,22 +441,97 @@ Item {
     anchors.right: parent.right
     anchors.bottom: parent.bottom
     anchors.margins: Style.space(10)
-    height: Math.min(Style.space(160), composer.implicitHeight) + (errorText.visible ? errorText.implicitHeight + Style.space(4) : 0)
+    height: (attachRow.visible ? attachRow.height + Style.space(8) : 0) + Math.min(Style.space(160), composer.implicitHeight) + (errorText.visible ? errorText.implicitHeight + Style.space(4) : 0)
     color: Util.alpha(Color.foreground, 0.05)
     border.width: 1
     border.color: root.editingTs !== "" || composer.activeFocus ? Color.accent : Util.alpha(Color.foreground, 0.15)
     visible: root.convId !== ""
 
+    // Staged attachments
+    Flow {
+      id: attachRow
+      visible: root.attachments.length > 0
+      anchors.top: parent.top
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.margins: Style.space(8)
+      spacing: Style.space(6)
+      Repeater {
+        model: root.attachments
+        delegate: Rectangle {
+          id: chip
+          required property var modelData
+          required property int index
+          width: chipRow.implicitWidth + Style.space(10)
+          height: Math.max(Style.space(44), chipRow.implicitHeight + Style.space(8))
+          color: Util.alpha(Color.foreground, 0.07)
+          Row {
+            id: chipRow
+            anchors.verticalCenter: parent.verticalCenter
+            x: Style.space(5)
+            spacing: Style.space(8)
+            Image {
+              visible: chip.modelData.image
+              width: visible ? Style.space(36) : 0
+              height: Style.space(36)
+              anchors.verticalCenter: parent.verticalCenter
+              source: chip.modelData.image ? "file://" + chip.modelData.path : ""
+              sourceSize.width: 72
+              sourceSize.height: 72
+              fillMode: Image.PreserveAspectCrop
+              asynchronous: true
+            }
+            Text {
+              visible: !chip.modelData.image
+              anchors.verticalCenter: parent.verticalCenter
+              text: "󰈔"
+              color: Color.foreground
+              font.family: Style.font.family
+              font.pixelSize: Style.font.heading
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              width: Math.min(implicitWidth, Style.space(200))
+              elide: Text.ElideMiddle
+              text: chip.modelData.name
+              textFormat: Text.PlainText
+              color: Color.foreground
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              visible: !root.uploading
+              text: "󰅖"
+              color: Util.alpha(Color.foreground, 0.6)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.body
+              MouseArea { anchors.fill: parent; anchors.margins: -Style.space(4); cursorShape: Qt.PointingHandCursor; onClicked: root.unattach(chip.index) }
+            }
+          }
+        }
+      }
+      Text {
+        visible: root.uploading
+        height: Style.space(44)
+        verticalAlignment: Text.AlignVCenter
+        text: "Uploading…"
+        color: Util.alpha(Color.foreground, 0.6)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+      }
+    }
+
     ScrollView {
       id: scroll
       anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.top: parent.top
+      anchors.right: attachBtn.left
+      anchors.top: attachRow.visible ? attachRow.bottom : parent.top
       height: Math.min(Style.space(160), composer.implicitHeight)
       TextArea {
         id: composer
         wrapMode: TextArea.Wrap
-        placeholderText: root.threadTs !== "" ? "Reply…" : "Message " + root.title
+        placeholderText: root.attachments.length > 0 ? "Add a caption, or press Enter to send" : root.threadTs !== "" ? "Reply…" : "Message " + root.title
         placeholderTextColor: Util.alpha(Color.foreground, 0.4)
         color: Color.foreground
         selectionColor: Util.alpha(Color.accent, 0.35)
@@ -392,19 +540,48 @@ Item {
         background: null
         padding: Style.space(8)
         Keys.onPressed: function(event) {
-          if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !(event.modifiers & Qt.ShiftModifier)) {
+          if (event.key === Qt.Key_V && (event.modifiers & Qt.ControlModifier) && !(event.modifiers & Qt.ShiftModifier)) {
+            event.accepted = true
+            root.pasteClipboard()
+          } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !(event.modifiers & Qt.ShiftModifier)) {
             event.accepted = true
             root.submit()
-          } else if (event.key === Qt.Key_Up && composer.text === "" && root.editingTs === "") {
+          } else if (event.key === Qt.Key_Up && composer.text === "" && root.editingTs === "" && root.attachments.length === 0) {
             if (root.editLast()) event.accepted = true
           } else if (event.key === Qt.Key_Escape && root.editingTs !== "") {
             event.accepted = true
             root.cancelEdit()
+          } else if (event.key === Qt.Key_Escape && root.attachments.length > 0 && !root.uploading) {
+            event.accepted = true
+            root.clearAttachments()
           } else if (event.key === Qt.Key_Escape && root.threadTs !== "") {
             event.accepted = true
             root.closeRequested()
           }
         }
+      }
+    }
+
+    // 📎 the desktop file picker
+    Text {
+      id: attachBtn
+      anchors.right: parent.right
+      anchors.bottom: scroll.bottom
+      anchors.rightMargin: Style.space(10)
+      anchors.bottomMargin: Style.space(7)
+      visible: root.editingTs === ""
+      width: visible ? implicitWidth : 0
+      text: "󰏢"
+      color: attachMouse.containsMouse ? Color.accent : Util.alpha(Color.foreground, 0.6)
+      font.family: Style.font.family
+      font.pixelSize: Style.font.title
+      MouseArea {
+        id: attachMouse
+        anchors.fill: parent
+        anchors.margins: -Style.space(4)
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.pickFiles()
       }
     }
     Text {
@@ -442,6 +619,12 @@ Item {
         if (!r.ok) root.sendError = r.error || "not saved"
         else if (root.editingTs === ts) root.cancelEdit()
       })
+      return
+    }
+    if (root.attachments.length > 0) {
+      if (root.uploading) return
+      composer.text = ""
+      root.sendAttachments(t.trim())
       return
     }
     if (t.trim() === "") return

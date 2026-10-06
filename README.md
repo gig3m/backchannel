@@ -71,7 +71,7 @@ To launch the window from the app launcher, copy
 | Reply in a thread | hover a message, 󰍪 |
 | View an image | click it: full size over the window, with Save, Copy, Open and Open in Slack (Esc closes); in the popup it opens in your image viewer |
 | Download a file | click it: saved to `~/Downloads`, and the notification opens it |
-| Upload | drop files onto a conversation |
+| Send an image or file | Ctrl+V a clipboard image (screenshots included), 󰏢 for the file picker, or drop files on the conversation; they wait above the composer, and what you type becomes the caption. Enter sends, Esc clears |
 | Edit your last message | Up in an empty composer (Esc cancels) |
 | Right-click a conversation | mark read/unread, favourite, mute, copy link, open in Slack, close DM / leave channel |
 | Right-click a message | react, reply in thread, copy text or link, open in Slack, mark unread from here, copy or save files; edit or delete your own |

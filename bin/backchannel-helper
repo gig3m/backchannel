@@ -1,0 +1,156 @@
+#!/usr/bin/python3 -I
+"""Backchannel's helper for what QML cannot do itself. Each command prints
+one line of JSON.
+
+    backchannel-helper pick [title]   ask the desktop's file portal for files
+                                      → {"paths": [...]} | {"cancelled": true}
+    backchannel-helper paste          save a clipboard image to a private file
+                                      → {"path": "..."} | {"image": false}
+    backchannel-helper clean          remove pasted images older than a day
+
+The file dialog is drawn by xdg-desktop-portal over D-Bus, so it is the
+same picker every other app on the desktop uses. Pasted images go to
+$XDG_RUNTIME_DIR/backchannel-paste (mode 0700), which the daemon can read
+inside its sandbox; they are deleted after sending.
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+
+WL_PASTE = "/usr/bin/wl-paste"
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "")
+PASTE_DIR = os.path.join(RUNTIME, "backchannel-paste") if RUNTIME else ""
+MAX_PASTE = 50 * 1024 * 1024
+
+# Clipboard types worth sending as an image, best first.
+IMAGE_TYPES = [("image/png", ".png"), ("image/jpeg", ".jpg"), ("image/webp", ".webp"), ("image/gif", ".gif")]
+
+
+def out(obj):
+    print(json.dumps(obj))
+    sys.stdout.flush()
+
+
+def pick(title):
+    import gi
+    gi.require_version("Gio", "2.0")
+    from gi.repository import Gio, GLib
+
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    except GLib.Error as e:
+        return {"error": "no session bus: %s" % e.message}
+    # The portal answers on a Request object whose path we can predict from
+    # our bus name and a token, so we subscribe before calling (no race).
+    sender = bus.get_unique_name()[1:].replace(".", "_")
+    token = "backchannel%d" % os.getpid()
+    handle = "/org/freedesktop/portal/desktop/request/%s/%s" % (sender, token)
+    loop = GLib.MainLoop()
+    result = {}
+
+    def on_response(_conn, _sender, _path, _iface, _signal, params):
+        code, results = params.unpack()
+        result["code"] = code
+        result["uris"] = list(results.get("uris", []))
+        loop.quit()
+
+    def subscribe(path):
+        bus.signal_subscribe("org.freedesktop.portal.Desktop", "org.freedesktop.portal.Request", "Response",
+                             path, None, Gio.DBusSignalFlags.NONE, on_response)
+
+    subscribe(handle)
+    options = {
+        "handle_token": GLib.Variant("s", token),
+        "multiple": GLib.Variant("b", True),
+        "accept_label": GLib.Variant("s", "Attach"),
+    }
+    try:
+        reply = bus.call_sync("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                              "org.freedesktop.portal.FileChooser", "OpenFile",
+                              GLib.Variant("(ssa{sv})", ("", title, options)),
+                              GLib.VariantType("(o)"), Gio.DBusCallFlags.NONE, -1, None)
+    except GLib.Error as e:
+        return {"error": "file portal unavailable: %s" % e.message}
+    actual = reply.unpack()[0]
+    if actual != handle:  # older portals choose their own handle
+        subscribe(actual)
+    GLib.timeout_add_seconds(3600, loop.quit)
+    loop.run()
+    if result.get("code") != 0:
+        return {"cancelled": True}
+    paths = []
+    for uri in result.get("uris", []):
+        try:
+            paths.append(GLib.filename_from_uri(uri)[0])
+        except GLib.Error:
+            pass
+    return {"paths": paths}
+
+
+def paste():
+    if not PASTE_DIR:
+        return {"error": "XDG_RUNTIME_DIR is not set"}
+    try:
+        types = subprocess.run([WL_PASTE, "--list-types"], capture_output=True, timeout=5).stdout.decode(errors="replace").split()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return {"error": "wl-paste: %s" % e}
+    chosen = next(((t, ext) for t, ext in IMAGE_TYPES if t in types), None)
+    if not chosen:
+        return {"image": False}
+    mime, ext = chosen
+    os.makedirs(PASTE_DIR, mode=0o700, exist_ok=True)
+    os.chmod(PASTE_DIR, 0o700)
+    name = "pasted-%s%s" % (time.strftime("%Y-%m-%d-%H%M%S"), ext)
+    path = os.path.join(PASTE_DIR, name)
+    n = 2
+    while os.path.exists(path):
+        path = os.path.join(PASTE_DIR, "pasted-%s-%d%s" % (time.strftime("%Y-%m-%d-%H%M%S"), n, ext))
+        n += 1
+    try:
+        data = subprocess.run([WL_PASTE, "--no-newline", "--type", mime], capture_output=True, timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return {"error": "wl-paste: %s" % e}
+    if not data:
+        return {"image": False}
+    if len(data) > MAX_PASTE:
+        return {"error": "the clipboard image is larger than 50 MB"}
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    return {"path": path}
+
+
+def clean():
+    if not PASTE_DIR or not os.path.isdir(PASTE_DIR):
+        return {"removed": 0}
+    cutoff = time.time() - 86400
+    removed = 0
+    for name in os.listdir(PASTE_DIR):
+        p = os.path.join(PASTE_DIR, name)
+        try:
+            if os.path.isfile(p) and os.path.getmtime(p) < cutoff:
+                os.remove(p)
+                removed += 1
+        except OSError:
+            pass
+    return {"removed": removed}
+
+
+def main(argv):
+    cmd = argv[1] if len(argv) > 1 else ""
+    if cmd == "pick":
+        out(pick(argv[2] if len(argv) > 2 else "Attach files"))
+    elif cmd == "paste":
+        out(paste())
+    elif cmd == "clean":
+        out(clean())
+    else:
+        out({"error": "usage: backchannel-helper pick [title] | paste | clean"})
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

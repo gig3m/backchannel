@@ -4,3 +4,4 @@
 /daemon/packaging/**/src/
 /daemon/packaging/**/pkg/
 /daemon/packaging/**/*.tar.gz
+__pycache__/
