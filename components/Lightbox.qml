@@ -31,8 +31,11 @@ Rectangle {
     root.failed = false
     root.visible = true
     root.forceActiveFocus()
-    if (service && file) service.filePath(file.id, function(p) {
-      if (root.file !== file) return
+    // Compare by id: a file that came through a Repeater's model is a fresh
+    // copy on every read, so identity never matches.
+    var id = file ? file.id : ""
+    if (service && id) service.filePath(id, function(p) {
+      if (!root.file || root.file.id !== id) return
       root.path = p
       root.failed = p === ""
     })
