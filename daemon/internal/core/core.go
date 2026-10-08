@@ -55,8 +55,23 @@ func (d *Daemon) Start() {
 	if c == nil {
 		return
 	}
-	if err := d.connect(*c); err != nil {
+	// At login the network is often not up yet, so keep retrying until Slack
+	// answers. Only an answer from Slack itself (a revoked token) ends it, or
+	// the user signing in or out in the meantime.
+	for wait := 2 * time.Second; ; wait = min(wait*2, time.Minute) {
+		err := d.connect(*c)
+		if err == nil {
+			return
+		}
 		slog.Error("resuming session", "err", err)
+		var slackErr slack.SlackErrorResponse
+		if errors.As(err, &slackErr) || c.Validate() != nil {
+			return
+		}
+		time.Sleep(wait)
+		if latest, _ := loadCredentials(); latest == nil || *latest != *c || d.snapshot().LoggedIn {
+			return
+		}
 	}
 }
 
