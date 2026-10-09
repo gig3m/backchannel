@@ -27,6 +27,17 @@ Requests run concurrently; match replies by `id`.
 | `file` | `file` (file id) | `{path}`; downloaded into the cache |
 | `upload` | `conv`, `path` (absolute), `text`, `thread_ts` | `{id}` |
 | `open_dm` | `user` | `Conversation` |
+| `edit` | `conv`, `ts`, `text` | `null`; own messages only |
+| `delete` | `conv`, `ts` | `null` |
+| `mark_unread` | `conv`, `ts` (optional; newest when empty) | `null`; unread from `ts` on |
+| `close` | `conv` | `null`; hides a DM or group DM |
+| `leave` | `conv` | `null`; leaves a channel |
+| `directory` | | `{people: [Person], channels: [ChannelInfo]}`: everyone but you, and public channels you are not in |
+| `join` | `conv` | `Conversation`; joins a public channel |
+| `search` | `query` (Slack search syntax), `page` (from 1) | `{results: [SearchResult] newest first, total, page, pages}` |
+
+In `send`, `edit` and `upload` text, `@Name` (a display name, real name or handle that
+only one person has) becomes a real mention.
 
 ## Events
 
@@ -53,6 +64,9 @@ Message      { ts, thread_ts, user, user_name, avatar, html, text, subtype, own,
                mention, edited, reply_count, latest_reply, reactions: [Reaction], files: [File] }
 Reaction     { name, emoji, count, me }
 File         { id, name, mimetype, size, image, link }
+Person       { id, name, real_name, handle, avatar, title }
+ChannelInfo  { id, name, topic, members }
+SearchResult { conv, conv_name, kind, thread_ts, message: Message }
 ```
 
 `Message.html` is Slack's markup rendered to a small, escaped HTML subset (`b i s code pre

@@ -15,6 +15,7 @@
         "chat:write",
         "reactions:read", "reactions:write",
         "users:read",
+        "search:read",
         "files:read", "files:write",
         "team:read"
       ]

@@ -5,6 +5,8 @@ import qs.Ui as Ui
 
 // The sidebar: direct messages by recent activity, then channels by name,
 // unread ones in bold with a count. Typing filters; arrows and Enter pick.
+// A query also finds people to message, public channels to join and, in
+// the window, a full message search.
 Item {
   id: root
   property var service: null
@@ -13,6 +15,7 @@ Item {
   readonly property bool hasTextFocus: search.activeFocus
 
   signal picked(string convId)
+  signal searchRequested(string query)
 
   readonly property string query: search.text.trim().toLowerCase()
 
@@ -37,7 +40,50 @@ Item {
     for (var f = 0; f < favs.length; f++) out.push({ section: "Favourites", c: favs[f] })
     for (var j = 0; j < dms.length; j++) out.push({ section: "Direct messages", c: dms[j] })
     for (var k = 0; k < chans.length; k++) out.push({ section: "Channels", c: chans[k] })
+    if (q === "" || !service) return out
+
+    // People without a DM in the list yet, and channels to join. Rows that
+    // are not conversations carry an id with a prefix; activate() acts on it.
+    var hasDM = {}
+    for (var d = 0; d < dms.length; d++) if (dms[d].kind === "dm") hasDM[dms[d].user_id] = true
+    for (var fv = 0; fv < favs.length; fv++) if (favs[fv].kind === "dm") hasDM[favs[fv].user_id] = true
+    var ppl = service.people, np = 0
+    for (var pi = 0; pi < ppl.length && np < 6; pi++) {
+      var p = ppl[pi]
+      if (hasDM[p.id]) continue
+      var hay = (p.name + " " + (p.real_name || "") + " " + (p.handle || "")).toLowerCase()
+      if (hay.indexOf(q) < 0) continue
+      out.push({ section: "People", c: { id: "person:" + p.id, name: p.name, kind: "dm", avatar: p.avatar, hint: p.real_name !== p.name ? p.real_name : (p.title || ""), unread: 0, mentions: 0 } })
+      np++
+    }
+    var other = service.otherChannels, nc = 0
+    for (var ci = 0; ci < other.length && nc < 6; ci++) {
+      var ch = other[ci]
+      if (String(ch.name).toLowerCase().indexOf(q) < 0) continue
+      out.push({ section: "Join a channel", c: { id: "join:" + ch.id, name: ch.name, kind: "channel", hint: ch.members + (ch.members === 1 ? " member" : " members"), unread: 0, mentions: 0 } })
+      nc++
+    }
+    if (!root.compact) out.push({ section: "Search", c: { id: "search:", name: "Messages with \u201c" + search.text.trim() + "\u201d", kind: "search", unread: 0, mentions: 0 } })
     return out
+  }
+
+  // Pick a row: a conversation opens; a person gets a DM, a channel is
+  // joined, then it opens; the search row hands the query up.
+  property string busy: ""
+  function activate(c) {
+    var s = root.service
+    if (!s || !c || root.busy !== "") return
+    var id = String(c.id)
+    if (id.indexOf("search:") === 0) { root.searchRequested(search.text.trim()); return }
+    var done = function(r) {
+      root.busy = ""
+      if (!r.ok) { s.toast(r.error || "could not open"); return }
+      search.text = ""
+      root.picked(r.result.id)
+    }
+    if (id.indexOf("person:") === 0) { root.busy = id; s.openDM(id.substring(7), done); return }
+    if (id.indexOf("join:") === 0) { root.busy = id; s.joinChannel(id.substring(5), done); return }
+    root.picked(id)
   }
 
   function focusSearch() { search.forceActiveFocus() }
@@ -48,7 +94,7 @@ Item {
 
   function showMenu(c, source, x, y) {
     var s = root.service
-    if (!s || !c) return
+    if (!s || !c || String(c.id).indexOf(":") >= 0) return
     var direct = c.kind === "dm" || c.kind === "group"
     var link = s.permalink(c.id, "", "")
     var items = [
@@ -95,7 +141,8 @@ Item {
     anchors.margins: Style.space(8)
     placeholderText: "Jump to…"
     Keys.onDownPressed: { list.forceActiveFocus(); list.currentIndex = 0 }
-    Keys.onReturnPressed: if (root.rows.length > 0) root.picked(root.rows[0].c.id)
+    Keys.onReturnPressed: if (root.rows.length > 0) root.activate(root.rows[0].c)
+    onActiveFocusChanged: if (activeFocus && root.service && root.service.people.length === 0) root.service.loadDirectory()
     Keys.onEscapePressed: function(event) { if (text !== "") { text = ""; event.accepted = true } else event.accepted = false }
   }
 
@@ -111,7 +158,7 @@ Item {
     keyNavigationEnabled: true
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-    Keys.onReturnPressed: if (currentIndex >= 0 && currentIndex < root.rows.length) root.picked(root.rows[currentIndex].c.id)
+    Keys.onReturnPressed: if (currentIndex >= 0 && currentIndex < root.rows.length) root.activate(root.rows[currentIndex].c)
     Keys.onUpPressed: function(event) { if (currentIndex <= 0) search.forceActiveFocus(); else event.accepted = false }
 
     delegate: Column {
@@ -163,14 +210,15 @@ Item {
           Text {
             anchors.centerIn: parent
             visible: !(item.c.kind === "dm" && item.c.avatar && root.service && root.service.showAvatars)
-            text: item.c.kind === "channel" ? "#" : item.c.kind === "private" ? "󰌾" : item.c.kind === "group" ? "󰡉" : "󰀄"
+            text: item.c.kind === "search" ? "󰍉" : item.c.kind === "channel" ? "#" : item.c.kind === "private" ? "󰌾" : item.c.kind === "group" ? "󰡉" : "󰀄"
             color: Util.alpha(Color.foreground, item.unread ? 0.9 : 0.5)
             font.family: Style.font.family
             font.pixelSize: Style.font.body
           }
         }
         Text {
-          width: parent.width - Style.space(26)
+          id: nameText
+          width: Math.min(implicitWidth, parent.width - Style.space(26))
           anchors.verticalCenter: parent.verticalCenter
           text: item.c.name
           textFormat: Text.PlainText
@@ -179,6 +227,17 @@ Item {
           font.family: Style.font.family
           font.pixelSize: Style.font.body
           font.bold: item.unread
+        }
+        Text {
+          visible: !!item.c.hint
+          width: Math.max(0, parent.width - Style.space(26) - nameText.width - parent.spacing)
+          anchors.verticalCenter: parent.verticalCenter
+          text: root.busy === item.c.id ? "…" : (item.c.hint || "")
+          textFormat: Text.PlainText
+          elide: Text.ElideRight
+          color: Util.alpha(Color.foreground, 0.45)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
         }
       }
 
@@ -211,7 +270,7 @@ Item {
         cursorShape: Qt.PointingHandCursor
         onClicked: function(ev) {
           if (ev.button === Qt.RightButton) root.showMenu(item.c, mouse, ev.x, ev.y)
-          else root.picked(item.c.id)
+          else root.activate(item.c)
         }
       }
     }

@@ -433,6 +433,158 @@ Item {
     step(0)
   }
 
+  // ---------- @mentions ----------
+
+  // Typing @ and a few letters offers people from the workspace; Tab or
+  // Enter puts "@Name" in the text, which the daemon turns into a real
+  // mention when it sends.
+  property var mentionHits: []
+  property int mentionIndex: 0
+  property int mentionStart: -1
+  property string mentionDismissed: ""   // the query Esc closed the list on
+  function updateMentions() {
+    var before = composer.text.substring(0, composer.cursorPosition)
+    var m = /(^|[\s(])@([^\s@]{0,40})$/.exec(before)
+    if (!m || !root.service || !composer.activeFocus) { root.mentionHits = []; root.mentionStart = -1; return }
+    var q = m[2].toLowerCase()
+    var start = before.length - m[2].length - 1
+    if (root.mentionDismissed === start + ":" + q) { root.mentionHits = []; return }
+    if (root.service.people.length === 0) root.service.loadDirectory()
+    var hits = []
+    var direct = root.conv && (root.conv.kind === "dm" || root.conv.kind === "group")
+    if (!direct) {
+      var specials = [["here", "Notify everyone online here"], ["channel", "Notify everyone in this channel"]]
+      for (var k = 0; k < specials.length; k++) if (q !== "" && specials[k][0].indexOf(q) === 0) hits.push({ special: true, name: specials[k][0], hint: specials[k][1] })
+    }
+    var ppl = root.service.people
+    var starts = function(s) {
+      s = String(s || "").toLowerCase()
+      if (s.indexOf(q) === 0) return true
+      var words = s.split(/[\s._-]+/)
+      for (var w = 1; w < words.length; w++) if (words[w].indexOf(q) === 0) return true
+      return false
+    }
+    for (var i = 0; i < ppl.length && hits.length < 7; i++) {
+      var p = ppl[i]
+      if (starts(p.name) || starts(p.real_name) || starts(p.handle))
+        hits.push({ name: p.name, real_name: p.real_name, handle: p.handle, avatar: p.avatar, hint: p.real_name !== p.name ? p.real_name : (p.title || "") })
+    }
+    root.mentionStart = start
+    root.mentionHits = hits
+    if (root.mentionIndex >= hits.length) root.mentionIndex = 0
+  }
+  function pickMention(i) {
+    var h = root.mentionHits[i]
+    if (!h || root.mentionStart < 0) return
+    // The daemon leaves a name two people share unlinked, so fall back to
+    // one only this person has.
+    var label = h.name
+    if (!h.special) {
+      var shared = function(v) {
+        var n = 0, l = String(v || "").toLowerCase(), ppl = root.service.people
+        for (var i = 0; i < ppl.length; i++) {
+          var p = ppl[i]
+          if (String(p.name).toLowerCase() === l || String(p.real_name || "").toLowerCase() === l || String(p.handle || "").toLowerCase() === l) n++
+        }
+        return n > 1
+      }
+      if (shared(label)) label = h.real_name && !shared(h.real_name) ? h.real_name : h.handle
+    }
+    var ins = "@" + label + " "
+    var start = root.mentionStart
+    composer.remove(start, composer.cursorPosition)
+    composer.insert(start, ins)
+    composer.cursorPosition = start + ins.length
+    root.mentionHits = []
+    root.mentionStart = -1
+    root.mentionIndex = 0
+  }
+  function dismissMentions() {
+    var before = composer.text.substring(0, composer.cursorPosition)
+    root.mentionDismissed = root.mentionStart + ":" + before.substring(root.mentionStart + 1).toLowerCase()
+    root.mentionHits = []
+  }
+
+  Rectangle {
+    id: mentionList
+    visible: root.mentionHits.length > 0 && composer.activeFocus
+    z: 10
+    anchors.left: composerBox.left
+    anchors.bottom: composerBox.top
+    anchors.bottomMargin: Style.space(4)
+    width: Math.min(composerBox.width, Style.space(380))
+    height: mentionCol.implicitHeight + Style.space(8)
+    color: Color.background
+    border.width: 1
+    border.color: Util.alpha(Color.foreground, 0.18)
+    Column {
+      id: mentionCol
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.margins: Style.space(4)
+      Repeater {
+        model: root.mentionHits
+        delegate: Rectangle {
+          id: hitRow
+          required property var modelData
+          required property int index
+          width: mentionCol.width
+          height: Style.space(28)
+          color: index === root.mentionIndex ? Util.alpha(Color.accent, 0.18) : hitMouse.containsMouse ? Util.alpha(Color.foreground, 0.06) : "transparent"
+          Row {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+            Item {
+              width: Style.space(18); height: Style.space(18)
+              anchors.verticalCenter: parent.verticalCenter
+              Image {
+                anchors.fill: parent
+                visible: !!hitRow.modelData.avatar && !!root.service && root.service.showAvatars
+                source: visible ? hitRow.modelData.avatar : ""
+                sourceSize.width: 36; sourceSize.height: 36
+                asynchronous: true
+              }
+              Text {
+                anchors.centerIn: parent
+                visible: !(hitRow.modelData.avatar && root.service && root.service.showAvatars)
+                text: hitRow.modelData.special ? "󰂞" : "󰀄"
+                color: Util.alpha(Color.foreground, 0.6)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+              }
+            }
+            Text {
+              id: hitName
+              anchors.verticalCenter: parent.verticalCenter
+              text: (hitRow.modelData.special ? "@" : "") + hitRow.modelData.name
+              textFormat: Text.PlainText
+              color: Color.foreground
+              font.family: Style.font.family
+              font.pixelSize: Style.font.body
+              font.bold: true
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              width: Math.max(0, parent.width - Style.space(26) - hitName.width - parent.spacing)
+              text: hitRow.modelData.hint || ""
+              textFormat: Text.PlainText
+              elide: Text.ElideRight
+              color: Util.alpha(Color.foreground, 0.5)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+          }
+          MouseArea { id: hitMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.pickMention(hitRow.index) }
+        }
+      }
+    }
+  }
+
   // ---------- composer ----------
 
   Rectangle {
@@ -539,7 +691,19 @@ Item {
         font.pixelSize: Style.font.body
         background: null
         padding: Style.space(8)
+        onTextChanged: root.updateMentions()
+        onCursorPositionChanged: root.updateMentions()
+        onActiveFocusChanged: if (!activeFocus) root.mentionHits = []
         Keys.onPressed: function(event) {
+          if (mentionList.visible) {
+            var n = root.mentionHits.length
+            if (event.key === Qt.Key_Down) { root.mentionIndex = (root.mentionIndex + 1) % n; event.accepted = true; return }
+            if (event.key === Qt.Key_Up) { root.mentionIndex = (root.mentionIndex + n - 1) % n; event.accepted = true; return }
+            if (event.key === Qt.Key_Tab || ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !(event.modifiers & Qt.ShiftModifier))) {
+              root.pickMention(root.mentionIndex); event.accepted = true; return
+            }
+            if (event.key === Qt.Key_Escape) { root.dismissMentions(); event.accepted = true; return }
+          }
           if (event.key === Qt.Key_V && (event.modifiers & Qt.ControlModifier) && !(event.modifiers & Qt.ShiftModifier)) {
             event.accepted = true
             root.pasteClipboard()

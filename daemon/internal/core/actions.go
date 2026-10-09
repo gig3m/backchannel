@@ -18,7 +18,7 @@ func (d *Daemon) edit(ctx context.Context, conv, ts, text string) error {
 	if strings.TrimSpace(text) == "" {
 		return errors.New("a message cannot be empty; delete it instead")
 	}
-	_, _, _, err = api.UpdateMessageContext(ctx, conv, ts, slack.MsgOptionText(escapeOutgoing(text), false), slack.MsgOptionLinkNames(true))
+	_, _, _, err = api.UpdateMessageContext(ctx, conv, ts, slack.MsgOptionText(d.encodeOutgoing(ctx, text), false), slack.MsgOptionLinkNames(true))
 	return err
 }
 

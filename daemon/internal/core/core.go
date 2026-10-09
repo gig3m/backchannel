@@ -32,6 +32,9 @@ type Daemon struct {
 	convs  map[string]*Conversation
 	users  map[string]*user
 	cancel context.CancelFunc
+
+	dirMu sync.Mutex // one directory fetch at a time
+	dir   *directory
 }
 
 type user struct {
@@ -137,6 +140,7 @@ func (d *Daemon) connect(c Credentials) error {
 	d.cancel = scancel
 	d.convs = map[string]*Conversation{}
 	d.users = map[string]*user{}
+	d.dir = nil
 	d.state = State{
 		LoggedIn: true, Loading: true, Version: d.version,
 		Team: auth.Team, TeamID: auth.TeamID, URL: auth.URL, User: auth.User, UserID: auth.UserID,
@@ -168,6 +172,8 @@ func (d *Daemon) Handle(cmd string, raw json.RawMessage) (any, error) {
 		Name      string `json:"name"`
 		On        bool   `json:"on"`
 		File      string `json:"file"`
+		Query     string `json:"query"`
+		Page      int    `json:"page"`
 		Path      string `json:"path"`
 		User      string `json:"user"`
 	}
@@ -192,7 +198,7 @@ func (d *Daemon) Handle(cmd string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		d.mu.Lock()
-		d.api, d.creds, d.convs, d.users = nil, nil, nil, nil
+		d.api, d.creds, d.convs, d.users, d.dir = nil, nil, nil, nil, nil
 		d.state = State{Version: d.version}
 		s := d.state
 		d.mu.Unlock()
@@ -226,6 +232,12 @@ func (d *Daemon) Handle(cmd string, raw json.RawMessage) (any, error) {
 		return nil, d.closeConv(ctx, f.Conv)
 	case "leave":
 		return nil, d.leave(ctx, f.Conv)
+	case "directory":
+		return d.directoryReply(ctx)
+	case "join":
+		return d.join(ctx, f.Conv)
+	case "search":
+		return d.search(ctx, f.Query, f.Page)
 	}
 	return nil, fmt.Errorf("unknown command %q", cmd)
 }
@@ -633,7 +645,7 @@ func (d *Daemon) send(ctx context.Context, conv, text, threadTS string) (any, er
 	if strings.TrimSpace(text) == "" {
 		return nil, errors.New("nothing to send")
 	}
-	opts := []slack.MsgOption{slack.MsgOptionText(escapeOutgoing(text), false), slack.MsgOptionLinkNames(true)}
+	opts := []slack.MsgOption{slack.MsgOptionText(d.encodeOutgoing(ctx, text), false), slack.MsgOptionLinkNames(true)}
 	if threadTS != "" {
 		opts = append(opts, slack.MsgOptionTS(threadTS))
 	}

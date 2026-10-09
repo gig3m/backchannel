@@ -271,8 +271,8 @@ Item {
   function applyStatus(s) {
     var was = root.loggedIn
     root.status = s
-    if (root.loggedIn && !was) root.refreshConversations()
-    if (!root.loggedIn) root.conversations = []
+    if (root.loggedIn && !was) { root.refreshConversations(); root.loadDirectory() }
+    if (!root.loggedIn) { root.conversations = []; root.people = []; root.otherChannels = [] }
   }
 
   function onEvent(ev) {
@@ -368,6 +368,44 @@ Item {
   function markUnread(convId, ts, cb) { root.request("mark_unread", { conv: convId, ts: ts || "" }, cb) }
   function closeConversation(convId, cb) { root.request("close", { conv: convId }, cb) }
   function leaveConversation(convId, cb) { root.request("leave", { conv: convId }, cb) }
+
+  // ---------- directory and search ----------
+
+  // Everyone in the workspace and the public channels the user is not in,
+  // for the Ctrl+K switcher and @mentions. Fetched once per sign-in and on
+  // demand after that; the daemon caches it.
+  property var people: []
+  property var otherChannels: []
+  property bool directoryLoading: false
+  function loadDirectory() {
+    if (root.directoryLoading || !root.loggedIn) return
+    root.directoryLoading = true
+    root.request("directory", {}, function(r) {
+      root.directoryLoading = false
+      if (!r.ok) { root.log("directory: " + r.error); return }
+      root.people = r.result.people || []
+      root.otherChannels = r.result.channels || []
+    })
+  }
+  function personById(id) {
+    for (var i = 0; i < root.people.length; i++) if (root.people[i].id === id) return root.people[i]
+    return null
+  }
+  // The DM with a person, opened in Slack if there is none yet.
+  function openDM(userId, cb) {
+    for (var i = 0; i < root.conversations.length; i++) {
+      var c = root.conversations[i]
+      if (c.kind === "dm" && c.user_id === userId) { if (!c.open) root.upsertConversation(Object.assign({}, c, { open: true })); cb({ ok: true, result: c }); return }
+    }
+    root.request("open_dm", { user: userId }, cb)
+  }
+  function joinChannel(convId, cb) {
+    root.request("join", { conv: convId }, function(r) {
+      if (r.ok) root.otherChannels = root.otherChannels.filter(function(c) { return c.id !== convId })
+      cb(r)
+    })
+  }
+  function search(query, page, cb) { root.request("search", { query: query, page: page || 1 }, cb) }
 
   // https://team.slack.com/archives/C0123/p1700000000000100, with the
   // thread for a reply.

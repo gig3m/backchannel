@@ -18,6 +18,13 @@ Item {
   property bool closingFromHost: false
   readonly property bool loggedIn: service ? service.loggedIn : false
   readonly property bool opened: window.visible
+  property bool searching: false
+
+  function showSearch(q) {
+    root.searching = true
+    searchView.run(q)
+    Qt.callLater(searchView.focusField)
+  }
 
   function open(payloadJson) {
     closingFromHost = false
@@ -41,6 +48,7 @@ Item {
     closingFromHost = false
   }
   function openConversation(id) {
+    root.searching = false
     if (thread.convId !== id) thread.convId = ""
     main.open(id, "")
     sidebar.selectedId = id
@@ -60,7 +68,7 @@ Item {
     onVisibleChanged: {
       if (!visible && !root.closingFromHost && root.shell && typeof root.shell.hide === "function")
         root.shell.hide(root.service ? root.service.pluginId : "gig3m.backchannel")
-      if (!visible) { setup.clearSecrets(); sidebar.closeMenus(); main.closeMenus(); thread.closeMenus(); lightbox.hide() }
+      if (!visible) { root.searching = false; setup.clearSecrets(); sidebar.closeMenus(); main.closeMenus(); thread.closeMenus(); lightbox.hide() }
     }
 
     SetupView {
@@ -76,6 +84,7 @@ Item {
       focus: true
       Keys.onPressed: function(event) {
         if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) { sidebar.focusSearch(); event.accepted = true }
+        else if (event.key === Qt.Key_F && (event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)) { root.showSearch(searchView.query); event.accepted = true }
       }
 
       // ---- sidebar ----
@@ -143,6 +152,7 @@ Item {
           anchors.bottom: parent.bottom
           service: root.service
           onPicked: function(id) { root.openConversation(id) }
+          onSearchRequested: function(q) { root.showSearch(q) }
           onConvLeft: function(id) { if (main.convId === id) { main.open("", ""); thread.convId = ""; sidebar.selectedId = "" } }
         }
       }
@@ -154,19 +164,33 @@ Item {
         anchors.bottom: parent.bottom
         anchors.left: side.right
         anchors.right: thread.visible ? thread.left : parent.right
+        visible: !root.searching
         service: root.service
         viewId: "window"
-        active: window.visible
+        active: window.visible && !root.searching
         onOpenThread: function(ts) { thread.open(main.convId, ts); Qt.callLater(thread.focusComposer) }
         onPreviewImage: function(file, ts, threadTs) { lightbox.show(file, main.convId, ts, threadTs) }
       }
       Text {
         anchors.centerIn: main
-        visible: main.convId === ""
+        visible: main.convId === "" && !root.searching
         text: "Pick a conversation, or press Ctrl+K."
         color: Util.alpha(Color.foreground, 0.5)
         font.family: Style.font.family
         font.pixelSize: Style.font.body
+      }
+
+      // ---- message search ----
+      SearchView {
+        id: searchView
+        visible: root.searching
+        anchors.fill: main
+        service: root.service
+        onCloseRequested: { root.searching = false; if (main.convId !== "") main.focusComposer(); else sidebar.focusSearch() }
+        onResultPicked: function(conv, threadTs) {
+          root.openConversation(conv)
+          if (threadTs !== "") { thread.open(conv, threadTs); Qt.callLater(thread.focusComposer) }
+        }
       }
 
       // ---- thread ----

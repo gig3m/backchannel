@@ -89,7 +89,7 @@ func (d *Daemon) upload(ctx context.Context, conv, path, comment, threadTS strin
 	}
 	sum, err := api.UploadFileContext(ctx, slack.UploadFileParameters{
 		File: path, FileSize: int(fi.Size()), Filename: filepath.Base(path),
-		Channel: conv, ThreadTimestamp: threadTS, InitialComment: escapeOutgoing(comment),
+		Channel: conv, ThreadTimestamp: threadTS, InitialComment: d.encodeOutgoing(ctx, comment),
 	})
 	if err != nil {
 		return nil, err

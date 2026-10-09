@@ -6,7 +6,8 @@ interface, a small Go daemon for the Slack session, and a Slack app that you own
 - **Bar widget**: the count of conversations waiting on you; click for a popup with what
   needs attention and a composer, middle-click for the full window.
 - **Window**: direct messages and channels, threads in a side pane, reactions, images,
-  drag-and-drop uploads, Ctrl+K to jump.
+  drag-and-drop uploads, `@`-completion, message search, and Ctrl+K to jump to a
+  conversation, message anyone, or join a channel.
 - **Notifications** through Omarchy's notifier, for DMs and mentions (or every channel
   message, if you like). Clicking one opens the conversation.
 - **Follows your Omarchy theme**, colors and font, like the rest of the shell.
@@ -67,6 +68,9 @@ To launch the window from the app launcher, copy
 | Choose what a click opens | right-click → Click opens, or the widget settings (popup by default; middle-click opens the other) |
 | Toggle the popup | `omarchy-shell gig3m.backchannel toggle` (bind it in `~/.config/hypr/bindings.conf`) |
 | Jump to a conversation | Ctrl+K in the window, or type in the popup |
+| Message someone new, join a channel | Ctrl+K and type their name: people and public channels you're not in are listed after your conversations |
+| Search messages | Ctrl+K, type, and pick "Messages with …" (or Ctrl+Shift+F); Slack's syntax works: `from:@name in:#channel before:2026-01-01`. Needs the `search:read` scope (see below) |
+| Mention someone | type `@` and a few letters; Tab or Enter picks |
 | Send / new line | Enter / Shift+Enter |
 | Reply in a thread | hover a message, 󰍪 |
 | View an image | click it: full size over the window, with Save, Copy, Open and Open in Slack (Esc closes); in the popup it opens in your image viewer |
@@ -78,12 +82,16 @@ To launch the window from the app launcher, copy
 | Status for scripts | `omarchy-shell gig3m.backchannel status` |
 | Daemon logs | `journalctl --user -u backchanneld -f` |
 
+An app made before search was added lacks the `search:read` scope. Add it at
+<https://api.slack.com/apps> → your app → OAuth & Permissions → User Token Scopes, then
+reinstall the app. If Slack shows a new User OAuth Token afterwards, sign out and paste it in.
+
 ## Not yet
 
 Favourites and mute are kept by Backchannel, not Slack (the public API has neither), so
 the official app won't see them.
 
-Backchannel is young. Not there yet: search, `@`-completion in the composer, custom emoji images, Slack's block layouts beyond their
+Backchannel is young. Not there yet: custom emoji images, Slack's block layouts beyond their
 text, multiple workspaces at once, and huddles (Slack has no public API for them).
 Contributions welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
 

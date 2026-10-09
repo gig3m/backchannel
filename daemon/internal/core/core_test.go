@@ -83,3 +83,37 @@ func TestTsBefore(t *testing.T) {
 		}
 	}
 }
+
+func TestEncodeMentions(t *testing.T) {
+	dir := &directory{mentions: map[string]string{
+		"jane doe": "U1", "jane": "U1", "jdoe": "U1",
+		"bob": "U2", "bob.smith": "U3",
+	}, longest: 9}
+	cases := map[string]string{
+		"hi @Jane Doe, ok?":     "hi <@U1>, ok?",
+		"@jane":                 "<@U1>",
+		"@bob.smith and @bob.":  "<@U3> and <@U2>.",
+		"mail jane@example.com": "mail jane@example.com",
+		"@bobby":                "@bobby",
+		"a < @jdoe & b":         "a &lt; <@U1> &amp; b",
+		"@here look":            "@here look",
+		"(@Jane Doe)":           "(<@U1>)",
+	}
+	for in, want := range cases {
+		if got := encodeMentions(in, dir); got != want {
+			t.Errorf("encodeMentions(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := encodeMentions("a < b", nil); got != "a &lt; b" {
+		t.Errorf("without a directory: %q", got)
+	}
+}
+
+func TestThreadOf(t *testing.T) {
+	if got := threadOf("https://x.slack.com/archives/C1/p1700000000000200?thread_ts=1700000000.000100&cid=C1"); got != "1700000000.000100" {
+		t.Errorf("threadOf = %q", got)
+	}
+	if got := threadOf("https://x.slack.com/archives/C1/p1700000000000200"); got != "" {
+		t.Errorf("threadOf root = %q", got)
+	}
+}
