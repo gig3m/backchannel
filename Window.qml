@@ -42,6 +42,18 @@ Item {
       else sidebar.focusSearch()
     })
   }
+  // Window-wide shortcuts. Text fields call this first from their own key
+  // handlers: Qt binds Ctrl+K to "delete to end of line" in editable text,
+  // so the key never reaches the window while the composer has focus.
+  function handleKey(event) {
+    var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+    var shift = (event.modifiers & Qt.ShiftModifier) !== 0
+    if (!root.loggedIn || !ctrl) return false
+    if (event.key === Qt.Key_K && !shift) { sidebar.focusSearch(); return true }
+    if (event.key === Qt.Key_F && shift) { root.showSearch(searchView.query); return true }
+    return false
+  }
+
   function close() {
     closingFromHost = true
     window.visible = false
@@ -82,10 +94,7 @@ Item {
       anchors.fill: parent
       visible: root.loggedIn
       focus: true
-      Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) { sidebar.focusSearch(); event.accepted = true }
-        else if (event.key === Qt.Key_F && (event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier)) { root.showSearch(searchView.query); event.accepted = true }
-      }
+      Keys.onPressed: function(event) { if (root.handleKey(event)) event.accepted = true }
 
       // ---- sidebar ----
       Rectangle {
@@ -151,6 +160,7 @@ Item {
           anchors.right: parent.right
           anchors.bottom: parent.bottom
           service: root.service
+          keyFilter: root.handleKey
           onPicked: function(id) { root.openConversation(id) }
           onSearchRequested: function(q) { root.showSearch(q) }
           onConvLeft: function(id) { if (main.convId === id) { main.open("", ""); thread.convId = ""; sidebar.selectedId = "" } }
@@ -166,6 +176,7 @@ Item {
         anchors.right: thread.visible ? thread.left : parent.right
         visible: !root.searching
         service: root.service
+        keyFilter: root.handleKey
         viewId: "window"
         active: window.visible && !root.searching
         onOpenThread: function(ts) { thread.open(main.convId, ts); Qt.callLater(thread.focusComposer) }
@@ -186,6 +197,7 @@ Item {
         visible: root.searching
         anchors.fill: main
         service: root.service
+        keyFilter: root.handleKey
         onCloseRequested: { root.searching = false; if (main.convId !== "") main.focusComposer(); else sidebar.focusSearch() }
         onResultPicked: function(conv, threadTs) {
           root.openConversation(conv)
@@ -202,6 +214,7 @@ Item {
         anchors.right: parent.right
         width: Math.max(Style.space(320), parent.width * 0.3)
         service: root.service
+        keyFilter: root.handleKey
         viewId: "window-thread"
         active: window.visible && visible
         onCloseRequested: { thread.convId = ""; thread.threadTs = ""; main.focusComposer() }

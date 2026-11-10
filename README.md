@@ -78,6 +78,7 @@ To launch the window from the app launcher, copy
 | Send an image or file | Ctrl+V a clipboard image (screenshots included), 󰏢 for the file picker, or drop files on the conversation; they wait above the composer, and what you type becomes the caption. Enter sends, Esc clears |
 | Edit your last message | Up in an empty composer (Esc cancels) |
 | Right-click a conversation | mark read/unread, favourite, mute, copy link, open in Slack, close DM / leave channel |
+| Copy part of a message | select it and press Ctrl+C, or right-click → Copy selection |
 | Right-click a message | react, reply in thread, copy text or link, open in Slack, mark unread from here, copy or save files; edit or delete your own |
 | Status for scripts | `omarchy-shell gig3m.backchannel status` |
 | Daemon logs | `journalctl --user -u backchanneld -f` |

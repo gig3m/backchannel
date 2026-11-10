@@ -12,6 +12,8 @@ import "Format.js" as Format
 Item {
   id: root
   property var service: null
+  // Window-wide shortcuts, tried before the text field's own keys.
+  property var keyFilter: null
   property string viewId: "view"
   property string convId: ""
   property string threadTs: ""
@@ -54,7 +56,7 @@ Item {
 
   // ---------- right-click on a message ----------
 
-  function showMessageMenu(m, index, source, x, y) {
+  function showMessageMenu(m, index, source, x, y, selection) {
     var s = root.service
     if (!s) return
     var system = !!m.subtype && ["bot_message", "thread_broadcast", "file_share", "me_message"].indexOf(m.subtype) < 0
@@ -63,6 +65,7 @@ Item {
     if (!system) items.push({ emojis: [{ n: "+1", e: "👍" }, { n: "white_check_mark", e: "✅" }, { n: "eyes", e: "👀" }, { n: "joy", e: "😂" }, { n: "pray", e: "🙏" }, { n: "tada", e: "🎉" }] })
     if (!system && root.threadTs === "") items.push({ id: "thread", icon: "󰍪", label: (m.reply_count || 0) > 0 ? "Open thread" : "Reply in thread" })
     items.push({ sep: true })
+    if (selection) items.push({ id: "copysel", icon: "󰆏", label: "Copy selection" })
     items.push({ id: "copy", icon: "󰆏", label: "Copy text", enabled: (m.text || "") !== "" })
     items.push({ id: "link", icon: "󰌷", label: "Copy link", enabled: link !== "" })
     items.push({ id: "open", icon: "󰏌", label: "Open in Slack", enabled: link !== "" })
@@ -81,7 +84,7 @@ Item {
       items.push({ id: "edit", icon: "󰏫", label: "Edit message" })
       items.push({ id: "delete", icon: "󰆴", label: "Delete message…", confirm: "Click again to delete" })
     }
-    msgMenu.show(source, x, y, items, { m: m, index: index })
+    msgMenu.show(source, x, y, items, { m: m, index: index, selection: selection || "" })
   }
 
   function closeMenus() { msgMenu.close() }
@@ -98,6 +101,7 @@ Item {
       if (id.indexOf("save:") === 0) { var f = m.files[Number(id.substring(5))]; s.saveFile(f.id, f.name); return }
       switch (id) {
       case "thread": root.openThread(m.ts); break
+      case "copysel": s.copyText(ctx.selection); break
       case "copy": s.copyText(m.text); break
       case "link": s.copyText(s.permalink(root.convId, m.ts, m.thread_ts || "")); break
       case "open": s.openUrl(s.permalink(root.convId, m.ts, m.thread_ts || "")); break
@@ -307,7 +311,7 @@ Item {
       // The message above is the next one in the model (older).
       older: index + 1 < messages.count ? JSON.parse(messages.get(index + 1).json) : null
       onOpenThread: function(ts) { root.openThread(ts) }
-      onContextRequested: function(source, x, y) { root.showMessageMenu(msg, index, source, x, y) }
+      onContextRequested: function(source, x, y) { root.showMessageMenu(msg, index, source, x, y, selection) }
       onImageActivated: function(file) { root.previewImage(file, msg.ts, msg.thread_ts || "") }
     }
 
@@ -695,6 +699,7 @@ Item {
         onCursorPositionChanged: root.updateMentions()
         onActiveFocusChanged: if (!activeFocus) root.mentionHits = []
         Keys.onPressed: function(event) {
+          if (root.keyFilter && root.keyFilter(event)) { event.accepted = true; return }
           if (mentionList.visible) {
             var n = root.mentionHits.length
             if (event.key === Qt.Key_Down) { root.mentionIndex = (root.mentionIndex + 1) % n; event.accepted = true; return }

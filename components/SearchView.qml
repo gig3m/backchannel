@@ -10,6 +10,8 @@ import "Format.js" as Format
 Item {
   id: root
   property var service: null
+  // Window-wide shortcuts, tried before the text field's own keys.
+  property var keyFilter: null
   property string query: ""
 
   signal resultPicked(string convId, string threadTs)
@@ -73,6 +75,7 @@ Item {
       anchors.leftMargin: Style.space(10)
       anchors.rightMargin: Style.space(10)
       placeholderText: "Search messages (from:@name in:#channel)"
+      Keys.onPressed: function(event) { if (root.keyFilter && root.keyFilter(event)) event.accepted = true }
       Keys.onReturnPressed: root.run(text)
       Keys.onEscapePressed: root.closeRequested()
     }

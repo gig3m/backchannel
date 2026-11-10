@@ -10,6 +10,8 @@ import qs.Ui as Ui
 Item {
   id: root
   property var service: null
+  // Window-wide shortcuts, tried before the text field's own keys.
+  property var keyFilter: null
   property string selectedId: ""
   property bool compact: false     // the bar popup: only what needs attention
   readonly property bool hasTextFocus: search.activeFocus
@@ -139,7 +141,8 @@ Item {
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.margins: Style.space(8)
-    placeholderText: "Jump to…"
+    placeholderText: "Jump to, or message someone…"
+    Keys.onPressed: function(event) { if (root.keyFilter && root.keyFilter(event)) event.accepted = true }
     Keys.onDownPressed: { list.forceActiveFocus(); list.currentIndex = 0 }
     Keys.onReturnPressed: if (root.rows.length > 0) root.activate(root.rows[0].c)
     onActiveFocusChanged: if (activeFocus && root.service && root.service.people.length === 0) root.service.loadDirectory()

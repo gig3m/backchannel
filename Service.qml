@@ -450,9 +450,31 @@ Item {
     if (String(path).indexOf(dir) === 0) Quickshell.execDetached(["rm", "-f", "--", String(path)])
   }
 
+  // Copy with wl-copy, which keeps serving the text after the shell reloads
+  // (Qt's own clipboard dies with the process). The text goes on stdin, not
+  // argv: no size limit, and it stays out of `ps`. If wl-copy is missing or
+  // fails, fall back to Qt's and say so, rather than copying nothing.
+  Component {
+    id: copyProc
+    Process {
+      property string payload: ""
+      stdinEnabled: true
+      onStarted: { write(payload); stdinEnabled = false }
+      onExited: function(code) {
+        if (code !== 0) {
+          Quickshell.clipboardText = payload
+          root.log("wl-copy exited " + code + "; used the shell's clipboard")
+          root.toast(code === 127 ? "wl-copy is not installed; copied until the shell restarts" : "wl-copy failed; copied until the shell restarts")
+        }
+        destroy()
+      }
+    }
+  }
   function copyText(t) {
     if (t === undefined || t === null || String(t) === "") return
-    Quickshell.execDetached(["wl-copy", "--", String(t)])
+    var p = copyProc.createObject(root, { payload: String(t), command: ["sh", "-c",
+      'command -v wl-copy >/dev/null 2>&1 || { cat >/dev/null; exit 127; }; exec wl-copy --type "text/plain;charset=utf-8" >/dev/null 2>&1'] })
+    p.running = true
   }
   // Open a file in its default application (imv for images on Omarchy).
   function openFile(fileId) {

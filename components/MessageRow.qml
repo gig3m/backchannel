@@ -17,6 +17,9 @@ Item {
   signal contextRequested(var source, real x, real y)
   signal imageActivated(var file)
 
+  // What the user has selected in this message, as plain text.
+  readonly property string selection: text.selectedText.replace(new RegExp("[\u2028\u2029]", "g"), "\n").replace(new RegExp("\ufffc", "g"), "")
+
   readonly property color fg: Color.foreground
   readonly property color muted: Util.alpha(Color.foreground, 0.6)
   readonly property color accent: Color.accent
@@ -137,6 +140,10 @@ Item {
           text: Format.styleHtml(row.msg.html, row.accent, row.muted, Util.alpha(Color.foreground, 0.08))
             + (row.msg.edited ? ' <span style="color:' + row.muted + '; font-size:small">(edited)</span>' : "")
           onLinkActivated: function(link) { if (row.service) row.service.openUrl(link) }
+          // Copy through the service (wl-copy) so the text outlives a shell reload.
+          Keys.onPressed: function(event) {
+            if (event.matches(StandardKey.Copy) && row.selection !== "" && row.service) { row.service.copyText(row.selection); event.accepted = true }
+          }
           MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.NoButton
